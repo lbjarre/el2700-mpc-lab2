@@ -11,10 +11,10 @@ with open('python-code/carmodels.yaml') as input_file:
 car = CarModel(car_models['car1'])
 
 Q1 = np.identity(2)
-Q2 = 0.001*np.identity(2)
+Q2 = 0.01*np.identity(2)
 Qf = Q1
 N = 5
-ref_y = np.sin(2*np.pi*0.05*np.arange(0, 10, 0.1))
+ref_y = np.sin(2*np.pi*0.05*np.arange(0, 10, 0.1)) + 8
 ref_x = np.linspace(0, 10, len(ref_y))
 ref = np.transpose(np.array([ref_x, ref_y]))
 

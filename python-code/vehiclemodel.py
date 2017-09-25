@@ -5,7 +5,7 @@ class CarModel:
 
     def __init__(self, params):
 
-        self.z = np.array([0, 0, 0, 0])
+        self.z = np.array([0, 8, 10, 0])
         self._beta = 0
 
         self.update_functions = lambda z, u: z + self.Ts*np.array([
@@ -48,6 +48,6 @@ class CarModel:
             print('Time {:1.1f} solved'.format(t))
 
         # reset to initial state for future simulations
-        self.z = np.array([0, 0, 0, 0])
+        self.z = np.array([0, 8, 10, 0])
 
         return t_vec, z_vec, u_vec, j_vec
