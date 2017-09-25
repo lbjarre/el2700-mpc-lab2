@@ -14,7 +14,6 @@ class MPC:
         self.beta_max = car_model.beta_max
         self.beta_dot_max = car_model.beta_dot_max
         self.Ts = car_model.Ts
-
         self.constraints = (
             {
                 'type': 'eq',
@@ -78,4 +77,5 @@ class MPC:
                            init_guess,
                            method='SLSQP',
                            constraints=self.constraints)
-        return self.get_control(res.x, 0)
+        if not res.success: print('No viable solution found!')
+        return self.get_control(res.x, 0), res.fun

@@ -8,11 +8,11 @@ class CarModel:
         self.z = np.array([0, 0, 0, 0])
         self._beta = 0
 
-        self.update_functions = lambda z, u: np.array([
-            z[0] + self.Ts*z[2]*np.cos(z[3] + u[1]),
-            z[1] + self.Ts*z[2]*np.sin(z[3] + u[1]),
-            z[2] + self.Ts*u[0],
-            z[3] + self.Ts*z[3]*np.sin(u[1])/params['l_r']
+        self.update_functions = lambda z, u: z + self.Ts*np.array([
+            z[2]*np.cos(z[3] + u[1]),
+            z[2]*np.sin(z[3] + u[1]),
+            u[0],
+            z[3]*np.sin(u[1])/params['l_r']
         ])
 
         self.a_max = params['a_max']
@@ -38,15 +38,16 @@ class CarModel:
         t_vec = np.arange(0, 10, self.Ts)
         z_vec = np.zeros((len(t_vec), 4))
         u_vec = np.zeros((len(t_vec), 2))
+        j_vec = np.zeros(len(t_vec))
         z_vec[0, :] = self.z
 
         # simulate each time step
         for i, t in enumerate(t_vec):
-            u_vec[i, :] = controller.calc_control(self.z, self._beta)
+            u_vec[i, :], j_vec[i] = controller.calc_control(self.z, self._beta)
             z_vec[i, :] = self.update_state(u_vec[i, :])
-            print('Time {0} solved'.format(t))
+            print('Time {:1.1f} solved'.format(t))
 
         # reset to initial state for future simulations
         self.z = np.array([0, 0, 0, 0])
 
-        return t_vec, z_vec, u_vec
+        return t_vec, z_vec, u_vec, j_vec
