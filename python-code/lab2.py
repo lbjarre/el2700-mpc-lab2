@@ -14,11 +14,11 @@ Q1 = np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = Q1
 N = 5
-ref_y = np.sin(2*np.pi*0.1*np.arange(0, 10, 0.1))
+ref_y = 3*np.sin(2*np.pi*0.1*np.arange(0, 10, 0.1))
 ref_x = np.linspace(0, 10, len(ref_y))
 ref = np.transpose(np.array([ref_x, ref_y]))
 
-nmpc = MPC(Q1, Q2, Qf, N, car.update_functions, ref)
+nmpc = MPC(Q1, Q2, Qf, N, ref, car)
 t, z, u = car.run_sim(nmpc)
 
 car_pos = [(x, y) for x, y in zip(z[:, 1], z[:, 2])]

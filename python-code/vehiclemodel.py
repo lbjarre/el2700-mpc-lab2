@@ -42,7 +42,7 @@ class CarModel:
 
         # simulate each time step
         for i, t in enumerate(t_vec):
-            u_vec[i, :] = controller.calc_control(self.z)
+            u_vec[i, :] = controller.calc_control(self.z, self._beta)
             z_vec[i, :] = self.update_state(u_vec[i, :])
             print('Time {0} solved'.format(t))
 

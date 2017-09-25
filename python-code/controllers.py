@@ -3,18 +3,26 @@ import scipy.optimize as opt
 
 class MPC:
 
-    def __init__(self, Q1, Q2, Qf, N, update_functions, reference):
+    def __init__(self, Q1, Q2, Qf, N, reference, car_model):
         self.Q1 = Q1
         self.Q2 = Q2
         self.Qf = Qf
         self.N = N
-        self.update_functions = update_functions
+        self.update_functions = car_model.update_functions
         self.reference = reference
+        self.a_max = car_model.a_max
+        self.beta_max = car_model.beta_max
+        self.beta_dot_max = car_model.beta_dot_max
+        self.Ts = car_model.Ts
 
         self.constraints = (
             {
                 'type': 'eq',
                 'fun': self.equality_constraints
+            },
+            {
+                'type': 'ineq',
+                'fun': self.inequality_constraints
             }
         )
 
@@ -43,6 +51,17 @@ class MPC:
             z_prev = new_state
         return f_eq
 
+    def inequality_constraints(self, x):
+        f_ineq = np.zeros(3*self.N)
+        beta_prev = self.beta0
+        for k in range(self.N):
+            curr_u = self.get_control(x, k)
+            f_ineq[3*k] = self.a_max - abs(curr_u[0])
+            f_ineq[3*k+1] = self.beta_max - abs(curr_u[1])
+            f_ineq[3*k+2] = self.beta_dot_max - abs((curr_u[1] - beta_prev)/self.Ts)
+            beta_prev = curr_u[1]
+        return f_ineq
+
     def get_control(self, x, i):
         start = 4*(self.N + 1) + 2*i
         return x[start:start + 2]
@@ -51,8 +70,9 @@ class MPC:
         start = 4*i
         return x[start:start + 4]
 
-    def calc_control(self, z):
+    def calc_control(self, z, beta):
         self.z0 = z
+        self.beta0 = beta
         init_guess = np.zeros(4*(self.N+1) + 2*self.N)
         res = opt.minimize(self.cost_function,
                            init_guess,
