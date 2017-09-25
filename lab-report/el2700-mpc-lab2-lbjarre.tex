@@ -1,0 +1,69 @@
+\documentclass{article}
+
+\usepackage{geometry}
+\usepackage{fontspec}
+\usepackage{mathtools}
+\usepackage{unicode-math}
+\usepackage{cleveref}
+\usepackage{hyperref}
+
+\geometry{
+  vmargin={2cm, 2cm},
+  hmargin={3cm, 3cm},
+  a4paper
+}
+
+\setmainfont{texgyrepagella}[
+  UprightFont=*-regular,
+  ItalicFont=*-italic,
+  BoldFont=*-bold,
+  BoldItalicFont=*-bolditalic
+]
+\setmathfont{texgyrepagella-math}
+
+\newcommand{\mail}[1]{\href{mailto:#1}{#1}}
+
+\begin{document}
+
+\begin{center}
+  \textbf{
+    \LARGE LAB2 \\
+    \large EL2700 - Model Predictive Control \\
+    \vspace{0.5cm}
+    \begin{tabular}{c}
+      Lukas Bjarre \\
+      \mail{lbjarre@kth.se} \\
+      921008-0256
+    \end{tabular} \\
+    \vspace{0.5cm}
+    \rule{0.75\textwidth}{0.4pt}
+  }
+\end{center}
+
+\section{Vehicle model}
+The first step of designing a good MPC is to obtain a good model of the system which is to be controlled.
+
+\subsection{Continous time system}
+The bicycle model in continous time
+\begin{equation}
+  \dot{\begin{bmatrix}
+    x(t) \\
+    y(t) \\
+    v(t) \\
+    \psi(t) \\
+  \end{bmatrix}} = \begin{bmatrix}
+    v(t)\cos\left(\psi(t) + \beta(t)\right) \\
+    v(t)\sin\left(\psi(t) + \beta(t)\right) \\
+    a(t) \\
+    \frac{v(t)}{l_r}\sin\left(\beta(t)\right) \\
+  \end{bmatrix}
+\end{equation}
+
+\subsection{Discrete time system}
+In order to implement the MPC the model needs to be discretesized. This is here done by the explicit Euler method, which yields the system:
+\begin{equation}
+  \mathbf{z}(k+1) = \mathbf{z}(k) + T_sf(\mathbf{z}, \mathbf{u})
+\end{equation}
+
+
+\end{document}

@@ -1,2 +1,5 @@
 EL2700_MPCObsAvoidance/*
 *.pyc
+lab-report/*
+!lab-report/*.tex
+!lab-report/*.pdf
