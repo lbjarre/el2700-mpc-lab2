@@ -62,20 +62,37 @@ class MPC:
         return f_ineq
 
     def get_control(self, x, i):
+        '''Gets z(i) from the optimization variable x'''
         start = 4*(self.N + 1) + 2*i
         return x[start:start + 2]
 
     def get_state(self, x, i):
+        '''Gets u(i) from the optimization variable x'''
         start = 4*i
         return x[start:start + 4]
 
     def calc_control(self, z, beta):
+        '''Calculate the MPC control given the current state z and the previous
+           wheel angle beta. Solves the optimization problem and returns the
+           first input step and the evaluated cost.'''
         self.z0 = z
         self.beta0 = beta
-        init_guess = np.zeros(4*(self.N+1) + 2*self.N)
+        init_guess = self.calc_init_guess(z, beta)
         res = opt.minimize(self.cost_function,
                            init_guess,
                            method='SLSQP',
                            constraints=self.constraints)
         if not res.success: print('No viable solution found!')
         return self.get_control(res.x, 0), res.fun
+
+    def calc_init_guess(self, z, beta):
+        '''Calculates an initial guess for the optimization problem based on
+           the input state and the wheel angle. Lets the system dynamics predict
+           the next states given no acceleration and the same wheel angle, which
+           is guaranteed to be a feasible solution.'''
+        z_init_guess = z
+        u = np.array([0, beta])
+        for k in range(self.N):
+            z = self.update_functions(z, u)
+            z_init_guess = np.concatenate((z_init_guess, z))
+        return np.concatenate((z_init_guess, np.tile(u, self.N)))
