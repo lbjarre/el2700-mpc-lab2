@@ -4,8 +4,8 @@
 \usepackage{fontspec}
 \usepackage{mathtools}
 \usepackage{unicode-math}
-\usepackage{cleveref}
 \usepackage{hyperref}
+\usepackage{cleveref}
 
 \geometry{
   vmargin={2cm, 2cm},
@@ -61,10 +61,14 @@ The continous time model used will be one derived by the bicycle model of the ca
 \end{equation}
 
 \subsection{Discrete time system}
-In order to implement the MPC the model needs to be discretizised. This is here done by the explicit Euler method. Introducing the sampling time $T_s$ and the discrete time variable $k=T_st$ the discretization yield the system:
+In order to implement the MPC the model needs to be discretizised. This is here done by the explicit Euler method. Introducing the sampling time $T_s$ and the discrete time variable $k$ such that $kT_s=t$ the discretization yield the system:
 \begin{equation}
-  z(k+1) = z(k) + T_sf(z(k),\,u(k))
+  z(k+1) = z(k) + T_sf\left(z(k),\,u(k)\right)
+  \label{eq:dtimemodel}
 \end{equation}
+\Cref{eq:dtimemodel} is the model which is both used in the controller and the simulation of the system.
+
+\section{Controller design}
 
 
 \end{document}
