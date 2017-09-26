@@ -22,8 +22,8 @@ class CarModel:
 
     def update_state(self, u):
         # check inputs for constrain violations
-        a = min(abs(u[0]), self.a_max)
-        beta = min(abs(u[1]), self.beta_max)
+        a = np.sign(u[0])*min(abs(u[0]), self.a_max)
+        beta = np.sign(u[1])*min(abs(u[1]), self.beta_max)
         beta_dot = (beta - self._beta)/self.Ts
         if abs(beta_dot) > self.beta_dot_max:
             beta = self._beta + np.sign(beta_dot)*self.Ts*self.beta_dot_max
@@ -33,7 +33,7 @@ class CarModel:
         self._beta = beta
         return self.z
 
-    def run_sim(self, controller):
+    def run_sim(self, controller, reference):
         # create time vector, allocate state and input vectors
         t_vec = np.arange(0, 10, self.Ts)
         z_vec = np.zeros((len(t_vec), 4))
@@ -43,7 +43,7 @@ class CarModel:
 
         # simulate each time step
         for i, t in enumerate(t_vec):
-            u_vec[i, :], j_vec[i] = controller.calc_control(self.z, self._beta)
+            u_vec[i, :], j_vec[i] = controller.calc_control(self.z, self._beta, reference[i:, :])
             z_vec[i, :] = self.update_state(u_vec[i, :])
             print('Time {:1.1f} solved'.format(t))
 

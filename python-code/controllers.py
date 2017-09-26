@@ -3,13 +3,12 @@ import scipy.optimize as opt
 
 class MPC:
 
-    def __init__(self, Q1, Q2, Qf, N, reference, car_model):
+    def __init__(self, Q1, Q2, Qf, N, car_model):
         self.Q1 = Q1
         self.Q2 = Q2
         self.Qf = Qf
         self.N = N
         self.update_functions = car_model.update_functions
-        self.reference = reference
         self.a_max = car_model.a_max
         self.beta_max = car_model.beta_max
         self.beta_dot_max = car_model.beta_dot_max
@@ -28,25 +27,34 @@ class MPC:
     def cost_function(self, x):
         J = 0;
         for k in range(self.N-1):
-            ref_err = self.reference[k, :] - self.get_state(x, k)[0:2]
+            ref_err = self.get_ref_err(x, self.reference, k)
             ref_cost = self.xTQx(ref_err, self.Q1)
             curr_u = self.get_control(x, k)
             u_cost = self.xTQx(curr_u, self.Q2)
             J = J + ref_cost + u_cost
-        ref_err = self.reference[self.N, :] - self.get_state(x, self.N)[0:2]
+        ref_err = self.get_ref_err(x, self.reference, k)
         term_cost = self.xTQx(ref_err, self.Qf)
         return J + term_cost
 
     def xTQx(self, x, Q):
         return np.dot(np.dot(np.transpose(x), Q), x)
 
+    def get_ref_err(self, x, ref, k):
+        pos = self.get_state(x, k)[0:2]
+        len_ref = ref.shape[0]
+        if k >= len_ref:
+            pos_ref = ref[-1, :]
+        else:
+            pos_ref = ref[k, :]
+        return pos - pos_ref
+
     def equality_constraints(self, x):
         f_eq = np.zeros(4*self.N)
         z_prev = self.z0
-        for i in range(self.N):
-            curr_u = self.get_control(x, i)
+        for k in range(self.N):
+            curr_u = self.get_control(x, k)
             new_state = self.update_functions(z_prev, curr_u)
-            f_eq[4*i: 4*(i+1)] = new_state - self.get_state(x, i+1)
+            f_eq[4*k: 4*(k+1)] = new_state - self.get_state(x, k+1)
             z_prev = new_state
         return f_eq
 
@@ -71,12 +79,13 @@ class MPC:
         start = 4*i
         return x[start:start + 4]
 
-    def calc_control(self, z, beta):
+    def calc_control(self, z, beta, reference):
         '''Calculate the MPC control given the current state z and the previous
            wheel angle beta. Solves the optimization problem and returns the
            first input step and the evaluated cost.'''
         self.z0 = z
         self.beta0 = beta
+        self.reference = reference
         init_guess = self.calc_init_guess(z, beta)
         res = opt.minimize(self.cost_function,
                            init_guess,

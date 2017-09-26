@@ -44,25 +44,26 @@
 The first step of designing a good MPC is to obtain a good model of the system which is to be controlled.
 
 \subsection{Continous time system}
-The bicycle model in continous time
+The continous time model used will be one derived by the bicycle model of the car. Given the internal states $z(t) = [x(t),\,y(t),\,v(t),\,\psi(t)]^T$ and the inputs $u(t) = [a(t),\,\beta(t)]^T$, the system dynamics can be expressed on the form $\dot{z}(t)=f(z(t),\,u(t))$ as:
 \begin{equation}
-  \dot{\begin{bmatrix}
+  \underbrace{\dot{\begin{bmatrix}
     x(t) \\
     y(t) \\
     v(t) \\
     \psi(t) \\
-  \end{bmatrix}} = \begin{bmatrix}
+  \end{bmatrix}}}_{\dot{z}(t)} = \underbrace{\begin{bmatrix}
     v(t)\cos\left(\psi(t) + \beta(t)\right) \\
     v(t)\sin\left(\psi(t) + \beta(t)\right) \\
     a(t) \\
     \frac{v(t)}{l_r}\sin\left(\beta(t)\right) \\
-  \end{bmatrix}
+  \end{bmatrix}}_{f(z(t),\,u(t))}
+  \label{eq:ctimemodel}
 \end{equation}
 
 \subsection{Discrete time system}
-In order to implement the MPC the model needs to be discretesized. This is here done by the explicit Euler method, which yields the system:
+In order to implement the MPC the model needs to be discretizised. This is here done by the explicit Euler method. Introducing the sampling time $T_s$ and the discrete time variable $k=T_st$ the discretization yield the system:
 \begin{equation}
-  \mathbf{z}(k+1) = \mathbf{z}(k) + T_sf(\mathbf{z}, \mathbf{u})
+  z(k+1) = z(k) + T_sf(z(k),\,u(k))
 \end{equation}
 
 

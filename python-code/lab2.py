@@ -10,16 +10,20 @@ with open('python-code/carmodels.yaml') as input_file:
 
 car = CarModel(car_models['car1'])
 
-Q1 = np.identity(2)
+Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = Q1
 N = 5
-ref_y = np.sin(2*np.pi*0.05*np.arange(0, 10, 0.1)) + 8
-ref_x = np.linspace(0, 10, len(ref_y))
+Ts = 0.1
+t_start = 0
+t_end = 10
+t = np.arange(t_start, t_end, Ts)
+ref_y = np.linspace(8, 13, len(t))
+ref_x = np.linspace(0, 100, len(t))
 ref = np.transpose(np.array([ref_x, ref_y]))
 
-nmpc = MPC(Q1, Q2, Qf, N, ref, car)
-t, z, u, j = car.run_sim(nmpc)
+nmpc = MPC(Q1, Q2, Qf, N, car)
+t, z, u, j = car.run_sim(nmpc, ref)
 
 car_pos = [(x, y) for x, y in zip(z[:, 0], z[:, 1])]
 x = z[:, 0]
