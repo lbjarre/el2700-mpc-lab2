@@ -3,7 +3,7 @@ import scipy.optimize as opt
 
 class MPC:
 
-    def __init__(self, Q1, Q2, Qf, N, car_model):
+    def __init__(self, Q1, Q2, Qf, N, car_model, obstacles=[], x_goal=None):
         self.Q1 = Q1
         self.Q2 = Q2
         self.Qf = Qf
@@ -13,6 +13,8 @@ class MPC:
         self.beta_max = car_model.beta_max
         self.beta_dot_max = car_model.beta_dot_max
         self.Ts = car_model.Ts
+        self.obstacles = obstacles
+        self.x_goal = x_goal
         self.constraints = (
             {
                 'type': 'eq',
@@ -89,10 +91,18 @@ class MPC:
            the next states given no acceleration and the same wheel angle, which
            is guaranteed to be a feasible solution.'''
         z_init_guess = z
-        u = np.array([0, beta])
-        for k in range(self.N):
-            z = self.update_functions(z, u)
-            z_init_guess = np.concatenate((z_init_guess, z))
+        while True:
+            u = np.array([0, beta])
+            for k in range(self.N):
+                z = self.update_functions(z, u)
+                # check if the new state causes any collisions
+                if any([obs.collision(z[0], z[1]) < 0 for obs in self.obstacles]):
+                    beta = beta + 0.1 # change steering angle slightly
+                    break
+                z_init_guess = np.concatenate((z_init_guess, z))
+            else:
+                # if no collisions were detected, exit the outer loop
+                break
         return np.concatenate((z_init_guess, np.tile(u, self.N)))
 
 class RefTrackMPC(MPC):
@@ -116,11 +126,6 @@ class RefTrackMPC(MPC):
         return self.get_input_constraints(x)
 
 class ObstacleAvoidMPC(MPC):
-
-    def __init__(self, Q1, Q2, Qf, N, car_model, obstacles, x_goal):
-        super().__init__(Q1, Q2, Qf, N, car_model)
-        self.obstacles = obstacles
-        self.x_goal = x_goal
 
     def cost_function(self, x):
         J = 0
