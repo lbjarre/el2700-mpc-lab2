@@ -16,13 +16,13 @@ obstacles = [Obstacle(o) for o in models['obstacles']]
 Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = 1
-N = 5
+N = 10
 Ts = 0.1
 x_goal = 50
 t_start = 0
 t_end = 10
 t = np.arange(t_start, t_end, Ts)
-ref_y = 2*np.sin(2*np.pi*0.1*t) + 8
+ref_y = 2*np.sin(2*np.pi*0.1*t)
 ref_x = np.linspace(0, 100, len(t))
 ref = np.transpose(np.array([ref_x, ref_y]))
 
@@ -40,14 +40,15 @@ plt.plot(t, y, 'r')
 plt.show()
 plt.plot(x, y)
 ax = plt.gca()
-[
-    ax.add_patch(
-        ptch.Rectangle(
-            *obs.get_plot_params(),
-            facecolor='red',
-            hatch='/'
-        )
-    ) for obs in obstacles]
+[ax.add_patch(
+    ptch.Rectangle(
+        *obs.get_plot_params(),
+        facecolor='red',
+        hatch='/'
+    )
+) for obs in obstacles]
+ax.set_xlim([0, 50])
+ax.set_ylim([-8, 8])
 #plt.plot(ref_x, ref_y)
 plt.show()
 plt.plot(t, j)

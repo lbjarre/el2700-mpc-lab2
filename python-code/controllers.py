@@ -81,8 +81,9 @@ class MPC:
         res = opt.minimize(self.cost_function,
                            init_guess,
                            method='SLSQP',
-                           constraints=self.constraints)
-        if not res.success: print('No viable solution found!')
+                           constraints=self.constraints,
+                           options={'maxiter': 500, 'ftol': 0.5})
+        # if not res.success: print('No viable solution found!')
         return self.get_control(res.x, 0), res.fun
 
     def calc_init_guess(self, z, beta):
@@ -148,5 +149,5 @@ class ObstacleAvoidMPC(MPC):
         for k in range(self.N):
             curr_z = self.get_state(x, k)
             for i, obs in enumerate(self.obstacles):
-                f_obs[n_obs*k: n_obs*k+i] = obs.collision(curr_z[0], curr_z[1])
+                f_obs[n_obs*k+i] = obs.collision(curr_z[0], curr_z[1])
         return np.concatenate((f_input, f_obs))
