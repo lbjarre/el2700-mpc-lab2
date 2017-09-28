@@ -3,6 +3,8 @@
 class Obstacle:
 
     def __init__(self, o):
+        self.x_size = o['x_size']
+        self.y_size = o['y_size']
         self.x_edge_lo = o['x'] - o['x_size']/2
         self.x_edge_hi = o['x'] + o['x_size']/2
         self.y_edge_lo = o['y'] - o['y_size']/2
@@ -12,3 +14,7 @@ class Obstacle:
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi
         in_y = self.y_edge_lo <= y and y <= self.y_edge_hi
         return -1 if (in_x and in_y) else 0
+
+    def get_plot_params(self):
+        lower_left = (self.x_edge_lo, self.y_edge_lo)
+        return [lower_left, self.x_size, self.y_size]

@@ -4,6 +4,7 @@ from controllers import RefTrackMPC, ObstacleAvoidMPC
 import numpy as np
 import yaml
 import matplotlib.pyplot as plt
+import matplotlib.patches as ptch
 
 with open('python-code/models.yaml') as input_file:
     models = yaml.safe_load(input_file)
@@ -38,6 +39,15 @@ plt.plot(t, y, 'r')
 #plt.plot(t, ref_y, 'r--')
 plt.show()
 plt.plot(x, y)
+ax = plt.gca()
+[
+    ax.add_patch(
+        ptch.Rectangle(
+            *obs.get_plot_params(),
+            facecolor='red',
+            hatch='/'
+        )
+    ) for obs in obstacles]
 #plt.plot(ref_x, ref_y)
 plt.show()
 plt.plot(t, j)
