@@ -17,6 +17,15 @@ class Obstacle:
             return -1
         return 0
 
+    def get_closest_edge_angle(self, x, y):
+        y_diff_hi = self.y_edge_hi - y
+        y_diff_lo = self.y_edge_lo - y
+        x_diff = self.x - x
+        angle_hi = np.arctan2(y_diff_hi, x_diff)
+        angle_lo = np.arctan2(y_diff_lo, x_diff)
+        i = np.argmin([angle_hi, abs(angle_lo)])
+        return [angle_hi, angle_lo][i]
+
     def get_plot_params(self):
         lower_left = (self.x_edge_lo, self.y_edge_lo)
         return [lower_left, self.x_size, self.y_size]

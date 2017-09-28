@@ -82,7 +82,7 @@ class MPC:
                            init_guess,
                            method='SLSQP',
                            constraints=self.constraints,
-                           options={'maxiter': 500, 'ftol': 0.5})
+                           options={'maxiter': 500, 'ftol': 0.01})
         # if not res.success: print('No viable solution found!')
         return self.get_control(res.x, 0), res.fun
 
@@ -91,13 +91,22 @@ class MPC:
            the input state and the wheel angle. Lets the system dynamics predict
            the next states given no acceleration and the same wheel angle, which
            is guaranteed to be a feasible solution.'''
+        z_0 = z
         z_init_guess = z
         while True:
             u = np.array([0, beta])
             for k in range(self.N):
                 z = self.update_functions(z, u)
                 # check if the new state causes any collisions
+                for obs in self.obstacles:
+                    if obs.collision(z[0], z[1]):
+                        angle = obs.get_closest_edge_angle(z_0[0], z_0[1])
+                        beta_desired = angle - z[3]
+                        beta_dot_desired = (beta_desired - beta)/self.Ts
+                        if abs(beta_dot_desired) > self.beta_dot_max:
+                            pass # something spread angle over multiple steps
                 if any([obs.collision(z[0], z[1]) < 0 for obs in self.obstacles]):
+
                     beta = beta + 0.1 # change steering angle slightly
                     break
                 z_init_guess = np.concatenate((z_init_guess, z))
