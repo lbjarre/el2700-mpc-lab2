@@ -82,7 +82,7 @@ class MPC:
                            init_guess,
                            method='SLSQP',
                            constraints=self.constraints,
-                           options={'maxiter': 500, 'ftol': 0.01})
+                           options={'maxiter': 100, 'ftol': 0.09})
         # if not res.success: print('No viable solution found!')
         return self.get_control(res.x, 0), res.fun
 
@@ -92,28 +92,42 @@ class MPC:
            the next states given no acceleration and the same wheel angle, which
            is guaranteed to be a feasible solution.'''
         z_0 = z
+        beta_0 = beta
         z_init_guess = z
+        u = np.tile([0.0, beta], (self.N, 1))
         while True:
-            u = np.array([0, beta])
             for k in range(self.N):
-                z = self.update_functions(z, u)
+                z = self.update_functions(z, u[k, :])
                 # check if the new state causes any collisions
                 for obs in self.obstacles:
                     if obs.collision(z[0], z[1]):
                         angle = obs.get_closest_edge_angle(z_0[0], z_0[1])
                         beta_desired = angle - z[3]
                         beta_dot_desired = (beta_desired - beta)/self.Ts
-                        if abs(beta_dot_desired) > self.beta_dot_max:
-                            pass # something spread angle over multiple steps
-                if any([obs.collision(z[0], z[1]) < 0 for obs in self.obstacles]):
-
-                    beta = beta + 0.1 # change steering angle slightly
-                    break
-                z_init_guess = np.concatenate((z_init_guess, z))
-            else:
-                # if no collisions were detected, exit the outer loop
+                        sgn = np.sign(beta_dot_desired)
+                        beta_prev = beta_0
+                        for n in range(self.N):
+                            sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
+                            beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
+                            u[n, :] = np.array([0, beta_prev])
+                            if sel == 0:
+                                break
+                        else:
+                            pass  # block here trying to decrease speed?
+                        u[n+1:, :] = np.tile([0, beta_prev], (self.N - n - 1, 1))
+                        break
+                else:
+                    # no collisions detected, add state to initial guess
+                    z_init_guess = np.concatenate((z_init_guess, z))
+                    continue
+                # collision detected, reset inital guess and retry with new u
+                z_init_guess = z_0
+                z = z_0
                 break
-        return np.concatenate((z_init_guess, np.tile(u, self.N)))
+            else:
+                # no collisions detected for all n, exit the outer loop
+                break
+        return np.concatenate((z_init_guess, np.ndarray.flatten(u)))
 
 class RefTrackMPC(MPC):
 
