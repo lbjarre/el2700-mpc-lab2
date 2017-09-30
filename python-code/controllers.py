@@ -103,7 +103,7 @@ class MPC:
                                #'ftol': 0.01
                            })
         # if not res.success: print('No viable solution found!')
-        return self.get_control(res.x, 0), res.fun
+        return self.get_control(res.x, 0), res.fun, res.nit
 
     def calc_init_guess(self):
         '''Calculates an initial guess for the optimization problem based on

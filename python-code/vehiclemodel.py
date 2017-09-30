@@ -1,5 +1,5 @@
 import numpy as np
-import yaml
+import time
 
 class CarModel:
 
@@ -38,14 +38,18 @@ class CarModel:
         z_vec = np.array([None, None, None, None])
         u_vec = np.array([None, None])
         j_vec = np.array([None])
+        i_vec = np.array([None, None])
         i = 0
         z = self.z
         while True:
-            u, j = controller.calc_control(self.z, self._beta, reference[i:, :])
+            t_start = time.process_time()
+            u, j, itr = controller.calc_control(self.z, self._beta, reference[i:, :])
+            t_solve = time.process_time() - t_start
             t_vec = np.vstack((t_vec, i*self.Ts))
             z_vec = np.vstack((z_vec, z))
             u_vec = np.vstack((u_vec, u))
             j_vec = np.vstack((j_vec, j))
+            i_vec = np.vstack((i_vec, [t_solve, itr]))
             print('Time {:1.1f} solved'.format(i*self.Ts))
             print('Curr state: {0}'.format(self.z))
             if z[0] >= controller.x_goal:
@@ -56,4 +60,4 @@ class CarModel:
         # reset to initial state for future simulations
         self.z = np.array([0, 0, 10, 0])
 
-        return t_vec, z_vec, u_vec, j_vec
+        return t_vec, z_vec, u_vec, j_vec, i_vec
