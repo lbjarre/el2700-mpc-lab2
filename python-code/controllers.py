@@ -1,5 +1,7 @@
 import numpy as np
 import scipy.optimize as opt
+import matplotlib.pyplot as plt
+import matplotlib.patches as ptch
 
 class MPC:
 
@@ -32,7 +34,10 @@ class MPC:
             (-np.inf, np.inf),
             (-np.inf, np.inf)
         )
-        u_bound = ((-np.inf, np.inf), (-np.inf, np.inf))
+        u_bound = (
+            (-self.a_max, self.a_max),
+            (-self.beta_max, self.beta_max)
+        )
         self.bounds = np.vstack((np.tile(z_bound, (self.N - 1, 1)), np.tile(u_bound, (self.N - 1, 1))))
 
     def xTQx(self, x, Q):
@@ -55,7 +60,9 @@ class MPC:
 
     def get_state(self, x, i):
         '''Gets u(i) from the optimization variable x'''
-        start = 4*i
+        if i == 0:
+            return self.z0
+        start = 4*(i-1)
         return x[start:start + 4]
 
     def get_model_constraints(self, x):
@@ -69,13 +76,11 @@ class MPC:
         return f_eq
 
     def get_input_constraints(self, x):
-        f_ineq = np.zeros(3*(self.N - 1))
+        f_ineq = np.zeros(self.N - 1)
         beta_prev = self.beta0
         for k in range(self.N - 1):
             curr_u = self.get_control(x, k)
-            f_ineq[3*k] = self.a_max - abs(curr_u[0])
-            f_ineq[3*k+1] = self.beta_max - abs(curr_u[1])
-            f_ineq[3*k+2] = self.beta_dot_max - abs((curr_u[1] - beta_prev)/self.Ts)
+            f_ineq[k] = self.beta_dot_max - abs((curr_u[1] - beta_prev)/self.Ts)
             beta_prev = curr_u[1]
         return f_ineq
 
@@ -86,23 +91,27 @@ class MPC:
         self.z0 = z
         self.beta0 = beta
         self.reference = reference
-        init_guess = self.calc_init_guess(z, beta)
+        init_guess = self.calc_init_guess()
         res = opt.minimize(self.cost_function,
                            init_guess,
                            method='SLSQP',
                            constraints=self.constraints,
                            bounds=self.bounds,
-                           options={'maxiter': 150, 'disp': True})#, 'ftol': 0.0001})
+                           options={
+                               'maxiter': 250,
+                               'disp': True,
+                               #'ftol': 0.01
+                           })
         # if not res.success: print('No viable solution found!')
         return self.get_control(res.x, 0), res.fun
 
-    def calc_init_guess(self, z, beta):
+    def calc_init_guess(self):
         '''Calculates an initial guess for the optimization problem based on
            the input state and the wheel angle. Lets the system dynamics predict
            the next states given no acceleration and the same wheel angle, which
            is guaranteed to be a feasible solution.'''
         a = 0.0
-        u = np.tile([a, beta], (self.N - 1, 1))
+        u = np.tile([a, self.beta0], (self.N - 1, 1))
         while True:
             z = np.zeros((self.N - 1, 4), dtype=np.float64)
             z_prev = self.z0
@@ -113,17 +122,18 @@ class MPC:
                     if obs.collision(z[k, 0], z[k, 1]):
                         angle = obs.get_closest_edge_angle(self.z0[0], self.z0[1])
                         beta_desired = angle - self.z0[3]
-                        beta_dot_desired = (beta_desired - beta)/self.Ts
+                        beta_dot_desired = (beta_desired - self.beta0)/self.Ts
                         sgn = np.sign(beta_dot_desired)
                         beta_prev = self.beta0
                         for n in range(self.N - 1):
                             sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
                             beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
                             u[n, :] = np.array([a, beta_prev])
+                            beta_desired = beta_desired - beta_prev
                             if sel == 0:
                                 break
                         else:
-                            a = a - 0.1
+                            a = -1
                         u[n + 1:, :] = np.tile([0, beta_prev], (self.N - n - 2, 1))
                         break
                 else:
@@ -180,9 +190,9 @@ class ObstacleAvoidMPC(MPC):
     def inequality_constraints(self, x):
         f_input = self.get_input_constraints(x)
         n_obs = len(self.obstacles)
-        f_obs = np.zeros(n_obs*self.N)
-        for k in range(self.N):
+        f_obs = np.zeros(n_obs*(self.N - 1))
+        for k in range(1, self.N):
             curr_z = self.get_state(x, k)
             for i, obs in enumerate(self.obstacles):
-                f_obs[n_obs*k+i] = obs.collision(curr_z[0], curr_z[1])
+                f_obs[n_obs*(k-1)+i] = obs.closest_distance(curr_z[0], curr_z[1])
         return np.concatenate((f_input, f_obs))

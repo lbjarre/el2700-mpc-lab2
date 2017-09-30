@@ -34,19 +34,6 @@ class CarModel:
         return self.z
 
     def run_sim(self, controller, reference):
-        # create time vector, allocate state and input vectors
-        # t_vec = np.arange(0, 10, self.Ts)
-        # z_vec = np.zeros((len(t_vec), 4))
-        # u_vec = np.zeros((len(t_vec), 2))
-        # j_vec = np.zeros(len(t_vec))
-        # z_vec[0, :] = self.z
-        #
-        # # simulate each time step
-        # for i, t in enumerate(t_vec):
-        #     u_vec[i, :], j_vec[i] = controller.calc_control(self.z, self._beta, reference[i:, :])
-        #     z_vec[i, :] = self.update_state(u_vec[i, :])
-        #     print('Time {:1.1f} solved'.format(t))
-
         t_vec = np.array([None])
         z_vec = np.array([None, None, None, None])
         u_vec = np.array([None, None])
@@ -60,6 +47,7 @@ class CarModel:
             u_vec = np.vstack((u_vec, u))
             j_vec = np.vstack((j_vec, j))
             print('Time {:1.1f} solved'.format(i*self.Ts))
+            print('Curr state: {0}'.format(self.z))
             if z[0] >= controller.x_goal:
                 break
             z = self.update_state(u)
