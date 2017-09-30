@@ -26,14 +26,14 @@ class MPC:
                 'fun': self.inequality_constraints
             }
         )
-        z_bound = [
-            (None, None),
+        z_bound = (
+            (-np.inf, np.inf),
             (track.y_edge_lo, track.y_edge_hi),
-            (None, None),
-            (None, None)
-        ]
-        u_bound = [(None, None), (None, None)]
-        self.bounds = np.vstack((np.tile(z_bound, (self.N, 1)), np.tile(u_bound, (self.N - 1, 1))))
+            (-np.inf, np.inf),
+            (-np.inf, np.inf)
+        )
+        u_bound = ((-np.inf, np.inf), (-np.inf, np.inf))
+        self.bounds = np.vstack((np.tile(z_bound, (self.N - 1, 1)), np.tile(u_bound, (self.N - 1, 1))))
 
     def xTQx(self, x, Q):
         return np.dot(np.dot(np.transpose(x), Q), x)
@@ -50,7 +50,7 @@ class MPC:
 
     def get_control(self, x, i):
         '''Gets z(i) from the optimization variable x'''
-        start = 4*(self.N) + 2*i
+        start = 4*(self.N - 1) + 2*i
         return x[start:start + 2]
 
     def get_state(self, x, i):
@@ -59,7 +59,7 @@ class MPC:
         return x[start:start + 4]
 
     def get_model_constraints(self, x):
-        f_eq = np.zeros(4*self.N)
+        f_eq = np.zeros(4*(self.N - 1))
         z_prev = self.z0
         for k in range(self.N - 1):
             curr_u = self.get_control(x, k)
@@ -69,7 +69,7 @@ class MPC:
         return f_eq
 
     def get_input_constraints(self, x):
-        f_ineq = np.zeros(3*self.N)
+        f_ineq = np.zeros(3*(self.N - 1))
         beta_prev = self.beta0
         for k in range(self.N - 1):
             curr_u = self.get_control(x, k)
@@ -101,22 +101,21 @@ class MPC:
            the input state and the wheel angle. Lets the system dynamics predict
            the next states given no acceleration and the same wheel angle, which
            is guaranteed to be a feasible solution.'''
-        z_0 = z
-        beta_0 = beta
-        z_init_guess = z
         a = 0.0
         u = np.tile([a, beta], (self.N - 1, 1))
         while True:
+            z = np.zeros((self.N - 1, 4), dtype=np.float64)
+            z_prev = self.z0
             for k in range(self.N - 1):
-                z = self.update_functions(z, u[k, :])
+                z[k, :] = self.update_functions(z_prev, u[k, :])
                 # check if the new state causes any collisions
                 for obs in self.obstacles:
-                    if obs.collision(z[0], z[1]):
-                        angle = obs.get_closest_edge_angle(z_0[0], z_0[1])
-                        beta_desired = angle - z[3]
+                    if obs.collision(z[k, 0], z[k, 1]):
+                        angle = obs.get_closest_edge_angle(self.z0[0], self.z0[1])
+                        beta_desired = angle - self.z0[3]
                         beta_dot_desired = (beta_desired - beta)/self.Ts
                         sgn = np.sign(beta_dot_desired)
-                        beta_prev = beta_0
+                        beta_prev = self.beta0
                         for n in range(self.N - 1):
                             sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
                             beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
@@ -125,20 +124,21 @@ class MPC:
                                 break
                         else:
                             a = a - 0.1
-                        u[n+1:, :] = np.tile([0, beta_prev], (self.N - n - 2, 1))
+                        u[n + 1:, :] = np.tile([0, beta_prev], (self.N - n - 2, 1))
                         break
                 else:
                     # no collisions detected, add state to initial guess
-                    z_init_guess = np.concatenate((z_init_guess, z))
+                    z_prev = z[k, :]
                     continue
                 # collision detected, reset inital guess and retry with new u
-                z_init_guess = z_0
-                z = z_0
                 break
             else:
                 # no collisions detected for all n, exit the outer loop
                 break
-        return np.concatenate((z_init_guess, np.ndarray.flatten(u)))
+        # flatten z and u and stack into the optimization variable
+        z_flat = np.ndarray.flatten(z)
+        u_flat = np.ndarray.flatten(u)
+        return np.concatenate((z_flat, u_flat))
 
 class RefTrackMPC(MPC):
 
