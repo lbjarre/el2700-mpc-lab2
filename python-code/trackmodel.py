@@ -29,3 +29,16 @@ class Obstacle:
     def get_plot_params(self):
         lower_left = (self.x_edge_lo, self.y_edge_lo)
         return [lower_left, self.x_size, self.y_size]
+
+class Track:
+
+    def __init__(self, o):
+        self.x_start = o['x_start']
+        self.x_end = o['x_end']
+        self.y_edge_hi = o['y_edge_hi']
+        self.y_edge_lo = o['y_edge_lo']
+
+    def in_track(self, x, y):
+        if self.y_edge_lo < y and y < self.y_edge_hi:
+            return 0
+        return -1
