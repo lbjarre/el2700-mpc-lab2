@@ -103,6 +103,28 @@ class MPC:
                                #'ftol': 0.01
                            })
         # if not res.success: print('No viable solution found!')
+        ### partial tracking
+        # z = np.zeros((self.N, 4))
+        # for k in range(self.N):
+        #     z[k, :] = self.get_state(res.x, k)
+        # fig = plt.figure()
+        #
+        # ax_xy = fig.add_subplot(1, 1, 1)
+        # [ax_xy.add_patch(
+        #     ptch.Rectangle(
+        #         *obs.get_plot_params(),
+        #         facecolor='red',
+        #         hatch='/'
+        #     )
+        # ) for obs in self.obstacles]
+        # ax_xy.plot(z[:, 0], z[:, 1])
+        # ax_xy.set_title('XY-plot')
+        # ax_xy.set_xlabel('x [m]')
+        # ax_xy.set_ylabel('y [m]')
+        # ax_xy.set_xlim([0, 50])
+        # ax_xy.set_ylim([-8, 8])
+        # plt.show()
+
         return self.get_control(res.x, 0), res.fun, res.nit
 
     def calc_init_guess(self):
@@ -125,11 +147,15 @@ class MPC:
                         beta_dot_desired = (beta_desired - self.beta0)/self.Ts
                         sgn = np.sign(beta_dot_desired)
                         beta_prev = self.beta0
+                        z_ = self.z0
                         for n in range(self.N - 1):
                             sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
                             beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
                             u[n, :] = np.array([a, beta_prev])
-                            beta_desired = beta_desired - beta_prev
+                            z_ = self.update_functions(z_, u[n, :])
+                            angle = obs.get_closest_edge_angle(z_[0], z_[1])
+                            beta_desired = angle - z_[3]
+                            beta_dot_desired = (beta_desired - u[n, 1])/self.Ts
                             if sel == 0:
                                 break
                         else:

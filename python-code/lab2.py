@@ -5,6 +5,7 @@ import numpy as np
 import yaml
 import matplotlib.pyplot as plt
 import matplotlib.patches as ptch
+import csv
 
 with open('python-code/models.yaml') as input_file:
     models = yaml.safe_load(input_file)
@@ -16,15 +17,8 @@ track = Track(models['track'])
 Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = 1
-N = 9
-Ts = 0.1
-x_goal = 50
-t_start = 0
-t_end = 10
-t = np.arange(t_start, t_end, Ts)
-ref_y = 2*np.sin(2*np.pi*0.1*t)
-ref_x = np.linspace(0, 100, len(t))
-ref = np.transpose(np.array([ref_x, ref_y]))
+N = 10
+ref = np.zeros((100, 4))
 
 # mpc = RefTrackMPC(Q1, Q2, Qf, N, car)
 mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N, car, obstacles, track)
@@ -67,10 +61,30 @@ ax_cost.set_xlabel('Time [s]')
 ax_cost.set_ylabel('J_n')
 
 ax_time = fig.add_subplot(3, 2, 6)
-ax_time.plot(t, i[:, 0])
+ax_time.plot(t, 1000*i[:, 0])
 ax_time.plot(t, i[:, 1])
 ax_time.set_title('Computation')
 ax_time.set_xlabel('Time [s]')
-ax_time.set_ylabel('Solve time, iterations')
+ax_time.set_ylabel('Solve time [ms], iterations [#]')
 
 plt.show()
+
+print(t.shape)
+
+with open('data/nmpc_N10.csv', 'w+') as outfile:
+    writer = csv.writer(outfile, delimiter=' ')
+    writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
+    iterlist = zip(
+        t[:, 0],
+        z[:, 0],
+        z[:, 1],
+        z[:, 2],
+        z[:, 3],
+        u[:, 0],
+        u[:, 1],
+        j[:, 0],
+        i[:, 0],
+        i[:, 1]
+    )
+    for r in iterlist:
+        writer.writerow(r)

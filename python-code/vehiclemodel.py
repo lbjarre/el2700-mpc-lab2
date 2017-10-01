@@ -60,4 +60,42 @@ class CarModel:
         # reset to initial state for future simulations
         self.z = np.array([0, 0, 10, 0])
 
-        return t_vec, z_vec, u_vec, j_vec, i_vec
+        return t_vec[1:], z_vec[1:, :], u_vec[1:, :], j_vec[1:], i_vec[1:, :]
+
+class LinearizedCarModel:
+
+    def __init__(self, params):
+        self.z = np.array([0, 0, 10, 0])
+        self._beta = 0
+        self.v0 = self.z[2]
+        self.Ts = params['Ts']
+        self.A = np.array([
+            [1, 0, self.Ts, 0],
+            [0, 1, 0, self.v0*self.Ts],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+        self.B = np.array([
+            0,
+            self.v0*self.Ts*(1 + (self.v0*self.Ts)/(2*params['l_r'])),
+            0,
+            self.v0*self.Ts/params['l_r']
+        ])
+        self.beta_max = np.radians(params['beta_max'])
+        self.beta_dot_max = np.radians(params['beta_dot_max'])
+
+    def update_functions(self, z, u):
+        return np.dot(self.A, z) + np.dot(self.B, u)
+
+    def update_state(self, u):
+        # check inputs for constrain violations
+        a = np.sign(u[0])*min(abs(u[0]), self.a_max)
+        beta = np.sign(u[1])*min(abs(u[1]), self.beta_max)
+        beta_dot = (beta - self._beta)/self.Ts
+        if abs(beta_dot) > self.beta_dot_max:
+            beta = self._beta + np.sign(beta_dot)*self.Ts*self.beta_dot_max
+
+        # update the states
+        self.z = self.update_functions(self.z, np.array([a, beta]))
+        self._beta = beta
+        return self.z

@@ -20,38 +20,17 @@ class Obstacle:
     def closest_distance(self, x, y):
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi
         in_y = self.y_edge_lo <= y and y <= self.y_edge_hi
+        x_dists = [self.x_edge_lo - x, x - self.x_edge_hi]
+        y_dists = [self.y_edge_lo - y, y - self.y_edge_hi]
+        x_sel = x_dists[np.argmin(np.abs(x_dists))]
+        y_sel = y_dists[np.argmin(np.abs(y_dists))]
+        if not (in_x or in_y):
+            return np.sqrt(x_sel**2 + y_sel**2)
         if in_x:
             if in_y:
-                # inside
-                x_c = self.x_edge_lo + self.x_size/2
-                y_c = self.y_edge_lo + self.y_size/2
-                dist_x_lo = self.x_edge_lo - x
-                dist_x_hi = x - self.x_edge_hi
-                dist_y_lo = self.y_edge_lo - y
-                dist_y_hi = y - self.y_edge_hi
-                return max([dist_x_lo, dist_x_hi, dist_y_lo, dist_y_hi])
-            else:
-                if y > self.y_edge_hi:
-                    return y - self.y_edge_hi
-                else:
-                    return self.y_edge_lo - y
-        else:
-            if in_y:
-                if x > self.x_edge_hi:
-                    return x - self.x_edge_hi
-                else:
-                    return self.x_edge_lo - x
-            else:
-                # corners
-                if x > self.x_edge_hi:
-                    x_vec = x - self.x_edge_hi
-                else:
-                    x_vec = self.x_edge_lo - x
-                if y > self.y_edge_hi:
-                    y_vec = y - self.y_edge_hi
-                else:
-                    y_vec = self.y_edge_lo - y
-                return np.sqrt(x_vec**2 + y_vec**2)
+                return max([x_sel, y_sel])
+            return y_sel
+        return x_sel
 
     def get_closest_edge_angle(self, x, y):
         y_diff_hi = self.y_edge_hi - y
