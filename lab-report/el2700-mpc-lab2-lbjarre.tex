@@ -6,12 +6,24 @@
 \usepackage{unicode-math}
 \usepackage{hyperref}
 \usepackage{cleveref}
+\usepackage{pgfplots}
+\usepackage{tikz}
+\usepackage{xcolor}
+
+\pgfplotsset{
+  compat=1.13,
+  empty line=none
+}
 
 \geometry{
-  vmargin={2cm, 2cm},
-  hmargin={3cm, 3cm},
+  vmargin={3cm, 3cm},
+  hmargin={3.5cm, 3.5cm},
   a4paper
 }
+
+\definecolor{lblue}{HTML}{0088DD}
+\definecolor{lred}{HTML}{FF5555}
+\definecolor{lgrey}{HTML}{BBBBBB}
 
 \setmainfont{texgyrepagella}[
   UprightFont=*-regular,
@@ -63,12 +75,163 @@ The continous time model used will be one derived by the bicycle model of the ca
 \subsection{Discrete time system}
 In order to implement the MPC the model needs to be discretizised. This is here done by the explicit Euler method. Introducing the sampling time $T_s$ and the discrete time variable $k$ such that $kT_s=t$ the discretization yield the system:
 \begin{equation}
-  z(k+1) = z(k) + T_sf\left(z(k),\,u(k)\right)
+  z_{k+1} = z_k + T_sf\left(z_k,\,u_k\right)
   \label{eq:dtimemodel}
 \end{equation}
 \Cref{eq:dtimemodel} is the model which is both used in the controller and the simulation of the system.
 
-\section{Controller design}
+\subsection{Linearized model}
+Nonlinear models can be simplified by linearization around an operational point, which in this case will be $\psi_0=0$, $v_0=v_0$ and $\beta_0=0$ ($x_0$ and $y_0$ does not end up in the final equations). Further simplifying the system to be constant speed (i.e. removing the acceleration input from $u(t)$) causes $v_0$ to be an equilibrium point, and the model can be approximated as:
+\begin{equation}
+  \dot{\begin{bmatrix}
+    \Delta x(t) \\
+    \Delta y(t) \\
+    \Delta v(t) \\
+    \Delta \psi(t) \\
+  \end{bmatrix}} = \underbrace{\begin{bmatrix}
+    0 & 0 & 1 & 0 \\
+    0 & 0 & 0 & v_0 \\
+    0 & 0 & 0 & 0 \\
+    0 & 0 & 0 & 0 \\
+  \end{bmatrix}}_{A}\begin{bmatrix}
+    \Delta x(t) \\
+    \Delta y(t) \\
+    \Delta v(t) \\
+    \Delta \psi(t) \\
+  \end{bmatrix} + \underbrace{\begin{bmatrix}
+    0 \\
+    v_0 \\
+    0 \\
+    \frac{v_0}{l_r} \\
+  \end{bmatrix}}_{B}\Delta\beta(t)
+\end{equation}
+The discretized system $\Delta z_{k+1}=\Phi\Delta z_k + \Gamma\Delta\beta_k$ is calculated via $\Phi=e^{AT_s}$ and $\Gamma=\int_0^{T_s}e^{As}B\mathrm{d}s$, which yields:
+\begin{equation}
+  \Delta z_{k+1} = \begin{bmatrix}
+    1 & 0 & T_s & 0 \\
+    0 & 1 & 0 & v_0T_s \\
+    0 & 0 & 1 & 0 \\
+    0 & 0 & 0 & 1 \\
+  \end{bmatrix}\Delta z_k + \begin{bmatrix}
+    0 \\
+    v_0T_s\left(1 + \frac{v_0T_s}{2l_r}\right) \\
+    0 \\
+    \frac{v_0T_s}{l_r} \\
+  \end{bmatrix} \Delta\beta_k
+\end{equation}
 
+\section{Track model}
+
+\begin{figure}[!ht]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      view={110}{20},
+      width=0.8\textwidth,
+      mesh/cols=40,
+      grid=major,
+      xlabel={$x$ [m]},
+      ylabel={$y$ [m]},
+      zlabel={$d_{\mathrm{obs}}(x,\,y)$}
+    ]
+      \addplot3 [
+        surf,
+        shader=faceted,
+        opacity=0.6,
+        fill opacity=0.6,
+        fill=lblue,
+        faceted color=lblue
+      ] table {../data/closest_distance.csv};
+      \addplot3 [
+        surf,
+        fill=black,
+        fill opacity=0.1,
+        opacity=0.1,
+        faceted color=black,
+        domain=-5:5,
+        domain y=-5:5
+      ] {0*x+0*y};
+      \addplot3 [
+        surf,
+        shader=faceted,
+        fill opacity=0.6,
+        fill=black,
+        faceted color=black,
+        domain=-1:1,
+        domain y=-3:3,
+        samples=5
+      ] {0*x+0*y};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Plot of the distance function $d_{\mathrm{obs}(x,\,y)}$ around an obstacle centered at $(0,\,0)$ and dimensions $x_{\mathrm{size}}=2$, $y_{\mathrm{size}}=6$.}
+  \label{fig:obsdistfunc}
+\end{figure}
+
+\section{Controller design}
+The controller needs a cost function to minimize to calculate the optimal control. Two parts will be considered here for the cost function: distance to goal and control size.
+
+\subsection{Distance to goal}
+The main objective in this setting is to reach the end of the track as quickly as possible, so punishing the distance to the end will cause the controller to get there as quickly as possible.
+
+\subsection{MPC formulation}
+
+\begin{equation}
+  \text{minimize}\;\sum_{n=0}^{N-1}\left[u_n^TQ_uu_n + (x_{\mathrm{goal}} - x_n)Q_x\right] + (x_{\mathrm{goal}}-x_N)Q_x\\
+  \text{subject to}\;z_{k+1} = z_k + T_s f(z_k, u_k)\;\forall k=0,\,1,\,\ldots\,,\,N-1
+\end{equation}
+
+\section{Simulations}
+
+\begin{figure}[!ht]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=0.9\textwidth,
+      height=250pt,
+      xmin=0,
+      xmax=50,
+      ymin=-8,
+      ymax=8
+    ]
+      \draw [dashed, line width=0.5pt, lgrey] (0, 0) -- (50, 0);
+      \draw [fill=lred] (9, -5) rectangle (11, 1);
+      \draw [fill=lred] (19, -3) rectangle (21, 3);
+      \draw [fill=lred] (29, -5) rectangle (31, 1);
+      \draw [fill=lred] (39, 3) rectangle (41, 9);
+      \draw [fill=lred] (0, -8) rectangle (50, -7.8);
+      \draw [fill=lred] (0, 8) rectangle (50, 7.8);
+      \addplot+ [
+        color=lblue,
+        mark=*,
+        mark size=2pt,
+        mark options={lblue},
+        densely dashed,
+        line width=1pt
+      ] table [x=x, y=y] {../data/nmpc_N10.csv};
+    \end{axis}
+  \end{tikzpicture}
+
+\end{figure}
+
+\begin{figure}[!ht]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=0.9\textwidth,
+      height=150pt
+    ]
+      \addplot+ [
+        lblue,
+        mark=none,
+        line width=1pt
+      ] table [x=t, y=a] {../data/nmpc_N10.csv};
+      \addplot+ [
+        lred,
+        mark=none,
+        line width=1pt
+      ] table [x=t, y=beta] {../data/nmpc_N10.csv};
+    \end{axis}
+  \end{tikzpicture}
+\end{figure}
 
 \end{document}
