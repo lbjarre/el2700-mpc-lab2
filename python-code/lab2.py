@@ -1,5 +1,5 @@
 from vehiclemodel import NonlinearCarModel, LinearizedCarModel
-from trackmodel import Obstacle, Track
+from trackmodel import Track
 from controllers import RefTrackMPC, ObstacleAvoidMPC
 from simmaster import SimMaster
 import numpy as np
@@ -12,12 +12,13 @@ with open('python-code/models.yaml') as input_file:
     models = yaml.safe_load(input_file)
 
 car = NonlinearCarModel(models['car'])
+lcar = LinearizedCarModel(models['car'])
 track = Track(models['track'])
 
 Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = 1
-N = 13
+N = 7
 mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N)
 mpc.initialize(track, car)
 
@@ -73,7 +74,7 @@ ax_time.set_ylabel('Solve time [s], iterations [#]')
 
 plt.show()
 
-with open('data/nmpc_N13.csv', 'w+') as outfile:
+with open('data/nmpc_N7.csv', 'w+') as outfile:
     writer = csv.writer(outfile, delimiter=' ')
     writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
     iterlist = zip(

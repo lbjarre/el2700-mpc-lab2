@@ -14,8 +14,8 @@ class Obstacle:
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi
         in_y = self.y_edge_lo <= y and y <= self.y_edge_hi
         if in_x and in_y:
-            return -1
-        return 0
+            return True
+        return False
 
     def closest_distance(self, x, y):
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi

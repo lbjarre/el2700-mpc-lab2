@@ -24,6 +24,7 @@ class MPC:
 
     def initialize(self, track, car_model):
         self.beta0 = car_model._beta
+        self._x_opt = None
         self.Ts = car_model.Ts
         self.model_dynamics = car_model.get_model_dynamics(self.Ts)
         z_bound = (
@@ -60,14 +61,24 @@ class MPC:
     def get_control(self, x, i):
         '''Gets z(i) from the optimization variable x'''
         start = 4*(self.N - 1) + 2*i
-        return x[start:start + 2]
+        return x[start: start + 2]
 
     def get_state(self, x, i):
         '''Gets u(i) from the optimization variable x'''
         if i == 0:
             return self.z0
         start = 4*(i-1)
-        return x[start:start + 4]
+        return x[start: start + 4]
+
+    def set_state(self, x, z, i):
+        start = 4*(i-1)
+        x[start: start + 4] = z
+        return x
+
+    def set_control(self, x, u, i):
+        start = 4*(self.N - 1) + 2*i
+        x[start: start + 2] = u
+        return x
 
     def get_model_constraints(self, x):
         f_eq = np.zeros(4*(self.N - 1))
@@ -108,61 +119,71 @@ class MPC:
         t_solve = time.process_time() - t_start
         if partial_tracking:
             self.print_partial_progress(res.x, init_guess)
+        self._x_opt = res.x
         u_opt = self.get_control(res.x, 0)
         self.beta0 = u_opt[1]
         return u_opt, res.fun, res.nit, t_solve
 
     def calc_init_guess(self):
-        '''Calculates an initial guess for the optimization problem based on
-           the input state and the wheel angle. Lets the system dynamics predict
-           the next states given no acceleration and the same wheel angle, which
-           is guaranteed to be a feasible solution.'''
-        a = 0.0
-        u = np.tile([a, self.beta0], (self.N - 1, 1))
-        while True:
-            z = np.zeros((self.N - 1, 4), dtype=np.float64)
-            z_prev = self.z0
-            for k in range(self.N - 1):
-                z[k, :] = self.model_dynamics(z_prev, u[k, :])
-                # check if the new state causes any collisions
-                for obs in self.obstacles:
-                    if obs.collision(z[k, 0], z[k, 1]):
-                        angle = obs.get_closest_edge_angle(self.z0[0], self.z0[1])
-                        beta_desired = angle - self.z0[3]
-                        beta_dot_desired = (beta_desired - self.beta0)/self.Ts
-                        sgn = np.sign(beta_dot_desired)
-                        beta_prev = self.beta0
-                        z_ = self.z0
-                        for n in range(self.N - 1):
-                            sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
-                            beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
-                            u[n, :] = np.array([a, beta_prev])
-                            z_ = self.model_dynamics(z_, u[n, :])
-                            angle = obs.get_closest_edge_angle(z_[0], z_[1])
-                            beta_desired = angle - z_[3]
-                            beta_dot_desired = (beta_desired - u[n, 1])/self.Ts
-                            if sel == 0:
-                                break
-                        else:
-                            a = a - 0.1
-                            a_max = self.get_control(self.bounds, 0)[0][1]
-                            if abs(a) > a_max:
-                                a = np.sign(a)*a_max
-                        u[n + 1:, :] = np.tile([a, beta_prev], (self.N - n - 2, 1))
+        if self._x_opt is None:
+            return self.generate_new_guess()
+        x_init = np.zeros(6*(self.N - 1))
+        for k in range(self.N - 2):
+            _z_opt = self.get_state(self._x_opt, k + 2)
+            x_init = self.set_state(x_init, _z_opt, k + 1)
+            _u_opt = self.get_control(self._x_opt, k + 1)
+            x_init = self.set_control(x_init, _u_opt, k)
+        z_N = self.model_dynamics(_z_opt, _u_opt)
+        x_init = self.set_control(x_init, _u_opt, self.N - 2)
+        x_init = self.set_state(x_init, z_N, self.N - 1)
+        for obs in self.obstacles:
+            if obs.collision(z_N[0], z_N[1]):
+                sgn = np.sign(obs.get_closest_edge_angle(_z_opt[0], _z_opt[1]))
+                for n in range(self.N - 1, 0, -1):
+                    z = self.get_state(x_init, n - 1)
+                    u = self.get_control(x_init, n - 1)
+                    _u = self.get_control(x_init, n - 2)
+                    u[1] = _u[1] + sgn*self.Ts*self.beta_dot_max
+                    for k in range(self.N - n):
+                        z = self.model_dynamics(z, u)
+                        x_init = self.set_control(x_init, u, n + k - 1)
+                        x_init = self.set_state(x_init, z, n + k)
+                        u[1] = u[1] + sgn*self.Ts*self.beta_dot_max
+                    if not obs.collision(z[0], z[1]):
                         break
                 else:
-                    # no collisions detected, add state to initial guess
-                    z_prev = z[k, :]
-                    continue
-                # collision detected, reset inital guess and retry with new u
-                break
-            else:
-                # no collisions detected for all n, exit the outer loop
-                break
-        # flatten z and u and stack into the optimization variable
-        z_flat = np.ndarray.flatten(z)
-        u_flat = np.ndarray.flatten(u)
-        return np.concatenate((z_flat, u_flat))
+                    raise ValueError('cannot find init guess!')
+        return x_init
+
+    def generate_new_guess(self):
+        x_init = np.zeros(6*(self.N - 1))
+        for k in range(self.N - 1):
+            new_state = self.model_dynamics(
+                self.get_state(x_init, k),
+                self.get_control(x_init, k))
+            x_init = self.set_state(x_init, new_state, k + 1)
+            for obs in self.obstacles:
+                if obs.collision(new_state[0], new_state[1]):
+                    _z = self.z0
+                    _beta = self.beta0
+                    sel = 1
+                    for n in range(self.N - 1):
+                        if sel == 1:
+                            angle = obs.get_closest_edge_angle(_z[0], _z[1])
+                            beta_desired = angle - _z[3]
+                            beta_dot_desired = (beta_desired - _beta)/self.Ts
+                            sgn = np.sign(beta_dot_desired)
+                            sel = np.argmin(
+                                [abs(beta_dot_desired), self.beta_dot_max]
+                            )
+                            _beta = [
+                                beta_desired,
+                                _beta + sgn*self.Ts*self.beta_dot_max
+                            ][sel]
+                        x_init = self.set_control(x_init, [0, _beta], n)
+                        _z = self.model_dynamics(_z, [0, _beta])
+                        x_init = self.set_state(x_init, _z, n + 1)
+        return x_init
 
     def print_partial_progress(self, x_opt, x_init):
         z_opt = np.zeros((self.N, 4))
