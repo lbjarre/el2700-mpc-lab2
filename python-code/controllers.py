@@ -6,9 +6,11 @@ import time
 
 class MPC:
 
-    def __init__(self, Q1, Q2, Qf, N):
-        self.Q1 = Q1
-        self.Q2 = Q2
+    def __init__(self, Qz, Qu, Qf, N):
+        self.nz = 4
+        self.nu = 2
+        self.Qz = Qz
+        self.Qu = Qu
         self.Qf = Qf
         self.N = N
         self.constraints = (
@@ -33,10 +35,17 @@ class MPC:
             (-np.inf, np.inf),
             (-np.inf, np.inf)
         )
-        u_bound = (
+        u_bound_2 = (
             (-car_model.a_max, car_model.a_max),
             (-car_model.beta_max, car_model.beta_max)
         )
+        u_bound_1 = (
+            (-car_model.beta_max, car_model.beta_max)
+        )
+        if self.nu == 1:
+            u_bound = u_bound_1
+        else:
+            u_bound = u_bound_2
         self.bounds = np.vstack((
             np.tile(z_bound, (self.N - 1, 1)),
             np.tile(u_bound, (self.N - 1, 1))
@@ -60,33 +69,47 @@ class MPC:
 
     def get_control(self, x, i):
         '''Gets z(i) from the optimization variable x'''
-        start = 4*(self.N - 1) + 2*i
-        return x[start: start + 2]
+        start = self.nz*(self.N - 1) + self.nu*i
+        if self.nu == 1:
+            return x[start]
+        return x[start: start + self.nu]
 
     def get_state(self, x, i):
         '''Gets u(i) from the optimization variable x'''
         if i == 0:
             return self.z0
-        start = 4*(i-1)
-        return x[start: start + 4]
+        start = self.nz*(i-1)
+        return x[start: start + self.nz]
 
     def set_state(self, x, z, i):
-        start = 4*(i-1)
-        x[start: start + 4] = z
+        start = self.nz*(i-1)
+        x[start: start + self.nz] = z
         return x
 
     def set_control(self, x, u, i):
-        start = 4*(self.N - 1) + 2*i
-        x[start: start + 2] = u
+        start = self.nz*(self.N - 1) + self.nu*i
+        x[start: start + self.nu] = u
         return x
 
+    def get_beta(self, u):
+        if self.nu > 1:
+            return u[1]
+        return u
+
+    def set_beta(self, u, beta):
+        if self.nu > 1:
+            u[1] = beta
+        else:
+            u = beta
+        return u
+
     def get_model_constraints(self, x):
-        f_eq = np.zeros(4*(self.N - 1))
+        f_eq = np.zeros(self.nz*(self.N - 1))
         z_prev = self.z0
         for k in range(self.N - 1):
             curr_u = self.get_control(x, k)
             new_state = self.model_dynamics(z_prev, curr_u)
-            f_eq[4*k: 4*(k+1)] = new_state - self.get_state(x, k+1)
+            f_eq[self.nz*k: self.nz*(k+1)] = new_state - self.get_state(x, k+1)
             z_prev = new_state
         return f_eq
 
@@ -94,9 +117,9 @@ class MPC:
         f_ineq = np.zeros(self.N - 1)
         beta_prev = self.beta0
         for k in range(self.N - 1):
-            curr_u = self.get_control(x, k)
-            f_ineq[k] = self.beta_dot_max - abs((curr_u[1] - beta_prev)/self.Ts)
-            beta_prev = curr_u[1]
+            u = self.get_control(x, k)
+            f_ineq[k] = self.beta_dot_max - abs((self.get_beta(u) - beta_prev)/self.Ts)
+            beta_prev = self.get_beta(u)
         return f_ineq
 
     def calc_control(self, z, partial_tracking=False):
@@ -108,11 +131,11 @@ class MPC:
         init_guess = self.calc_init_guess()
         res = opt.minimize(self.cost_function,
                            init_guess,
-                           method='SLSQP',
+                           #method='SLSQP',
                            constraints=self.constraints,
                            bounds=self.bounds,
                            options={
-                               'maxiter': 250,
+                               'maxiter': 150,
                                'disp': True,
                                #'ftol': 0.01
                            })
@@ -121,13 +144,13 @@ class MPC:
             self.print_partial_progress(res.x, init_guess)
         self._x_opt = res.x
         u_opt = self.get_control(res.x, 0)
-        self.beta0 = u_opt[1]
+        self.beta0 = self.get_beta(u_opt)
         return u_opt, res.fun, res.nit, t_solve
 
     def calc_init_guess(self):
         if self._x_opt is None:
             return self.generate_new_guess()
-        x_init = np.zeros(6*(self.N - 1))
+        x_init = np.zeros((self.nz + self.nu)*(self.N - 1))
         for k in range(self.N - 2):
             _z_opt = self.get_state(self._x_opt, k + 2)
             x_init = self.set_state(x_init, _z_opt, k + 1)
@@ -143,12 +166,14 @@ class MPC:
                     z = self.get_state(x_init, n - 1)
                     u = self.get_control(x_init, n - 1)
                     _u = self.get_control(x_init, n - 2)
-                    u[1] = _u[1] + sgn*self.Ts*self.beta_dot_max
+                    beta = self.get_beta(_u) + sgn*self.Ts*self.beta_dot_max
+                    u = self.set_beta(u, beta)
                     for k in range(self.N - n):
                         z = self.model_dynamics(z, u)
                         x_init = self.set_control(x_init, u, n + k - 1)
                         x_init = self.set_state(x_init, z, n + k)
-                        u[1] = u[1] + sgn*self.Ts*self.beta_dot_max
+                        beta = self.get_beta(u) + sgn*self.Ts*self.beta_dot_max
+                        u = self.set_beta(u, beta)
                     if not obs.collision(z[0], z[1]):
                         break
                 else:
@@ -156,7 +181,7 @@ class MPC:
         return x_init
 
     def generate_new_guess(self):
-        x_init = np.zeros(6*(self.N - 1))
+        x_init = np.zeros((self.nz + self.nu)*(self.N - 1))
         for k in range(self.N - 1):
             new_state = self.model_dynamics(
                 self.get_state(x_init, k),
@@ -186,8 +211,8 @@ class MPC:
         return x_init
 
     def print_partial_progress(self, x_opt, x_init):
-        z_opt = np.zeros((self.N, 4))
-        z_init = np.zeros((self.N, 4))
+        z_opt = np.zeros((self.N, self.nz))
+        z_init = np.zeros((self.N, self.nz))
         for k in range(self.N):
             z_opt[k, :] = self.get_state(x_opt, k)
             z_init[k, :] = self.get_state(x_init, k)
@@ -215,9 +240,9 @@ class RefTrackMPC(MPC):
         J = 0
         for k in range(self.N-1):
             ref_err = self.get_ref_err(x, self.reference, k)
-            ref_cost = self.xTQx(ref_err, self.Q1)
+            ref_cost = self.xTQx(ref_err, self.Qz)
             curr_u = self.get_control(x, k)
-            u_cost = self.xTQx(curr_u, self.Q2)
+            u_cost = self.xTQx(curr_u, self.Qu)
             J = J + ref_cost + u_cost
         ref_err = self.get_ref_err(x, self.reference, k)
         term_cost = self.xTQx(ref_err, self.Qf)
@@ -236,12 +261,53 @@ class ObstacleAvoidMPC(MPC):
         for k in range(self.N-1):
             curr_u = self.get_control(x, k)
             curr_z = self.get_state(x, k)
-            u_cost = self.xTQx(curr_u, self.Q2)
+            u_cost = self.xTQx(curr_u, self.Qu)
             dist_to_goal = self.x_goal - curr_z[0]
             J = J + u_cost + self.Qf*dist_to_goal
         term_z = self.get_state(x, self.N)
         dist_to_goal = self.x_goal - term_z[0]
         return J + dist_to_goal*self.Qf
+
+    def equality_constraints(self, x):
+        return self.get_model_constraints(x)
+
+    def inequality_constraints(self, x):
+        f_input = self.get_input_constraints(x)
+        n_obs = len(self.obstacles)
+        f_obs = np.zeros(n_obs*(self.N - 1))
+        for k in range(1, self.N):
+            curr_z = self.get_state(x, k)
+            for i, obs in enumerate(self.obstacles):
+                f_obs[n_obs*(k-1)+i] = obs.closest_distance(curr_z[0], curr_z[1])
+        return np.concatenate((f_input, f_obs))
+
+class LinearizedMPC(MPC):
+
+    def __init__(self, Qz, Qu, Qf, Qzf, N):
+        super().__init__(Qz, Qu, Qf, N)
+        self.nu = 1
+        self.H = Qz
+        for i in range(self.N-2):
+            z1 = np.zeros((self.H.shape[0], self.Qz.shape[1]))
+            z2 = np.zeros((self.Qz.shape[0], self.H.shape[1]))
+            self.H = np.bmat([
+                [self.H, z1],
+                [z2, self.Qz]
+            ])
+        for i in range(self.N-1):
+            z1 = np.zeros((self.H.shape[0], self.Qu.shape[1]))
+            z2 = np.zeros((self.Qu.shape[0], self.H.shape[1]))
+            self.H = np.bmat([
+                [self.H, z1],
+                [z2, self.Qu]
+            ])
+        self.h = np.tile(Qzf, self.nz)
+        self.h = np.concatenate((self.h, np.zeros((self.N-1)*self.nu)))
+
+    def cost_function(self, x):
+        quadcost = self.xTQx(x, self.H)
+        lincost = np.dot(x, self.h)
+        return quadcost + lincost
 
     def equality_constraints(self, x):
         return self.get_model_constraints(x)

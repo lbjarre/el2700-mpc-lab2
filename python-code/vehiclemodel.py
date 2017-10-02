@@ -63,7 +63,7 @@ class LinearizedCarModel(CarModel):
     def get_model_dynamics(self, Ts):
         A = np.array([
             [1, 0, Ts, 0],
-            [0, 1, self.v0*Ts],
+            [0, 1, 0, self.v0*Ts],
             [0, 0, 1, 0],
             [0, 0, 0, 1]
         ])

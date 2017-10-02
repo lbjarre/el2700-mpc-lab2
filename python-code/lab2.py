@@ -1,6 +1,6 @@
 from vehiclemodel import NonlinearCarModel, LinearizedCarModel
 from trackmodel import Track
-from controllers import RefTrackMPC, ObstacleAvoidMPC
+from controllers import RefTrackMPC, ObstacleAvoidMPC, LinearizedMPC
 from simmaster import SimMaster
 import numpy as np
 import yaml
@@ -15,17 +15,26 @@ car = NonlinearCarModel(models['car'])
 lcar = LinearizedCarModel(models['car'])
 track = Track(models['track'])
 
-Q1 = 10*np.identity(2)
-Q2 = 0.01*np.identity(2)
+Qz = np.array([
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 0]
+])
+Qu = 0.01*np.identity(1)
 Qf = 1
-N = 13
-mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N)
+N = 8
+Qzf = np.array([-1, 0, 0, 0])
+mpc = ObstacleAvoidMPC(Qz, Qu, Qf, N)
 mpc.initialize(track, car)
 
-partial_tracking = False
+lmpc = LinearizedMPC(Qz, Qu, Qf, Qzf, N)
+lmpc.initialize(track, lcar)
+
+partial_tracking = True
 
 master = SimMaster(car.Ts)
-t, z, u, j, i = master.run_sim(track, car, mpc, partial_tracking)
+t, z, u, j, i = master.run_sim(track, car, lmpc, partial_tracking)
 
 fig_xy = plt.figure()
 
@@ -74,7 +83,7 @@ ax_time.set_ylabel('Solve time [100 ms], iterations [#]')
 
 plt.show()
 
-with open('data/nmpc_N'+str(N)+'.csv', 'w+') as outfile:
+with open('data/lmpc_N'+str(N)+'.csv', 'w+') as outfile:
     writer = csv.writer(outfile, delimiter=' ')
     writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
     iterlist = zip(

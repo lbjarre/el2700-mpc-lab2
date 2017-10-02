@@ -8,8 +8,8 @@ class SimMaster:
 
     def run_sim(self, track, car_model, controller, partial_tracking=False):
         t_vec = np.array([None])
-        z_vec = np.array([None, None, None, None])
-        u_vec = np.array([None, None])
+        z_vec = np.array([None]*controller.nz)
+        u_vec = np.array([None]*controller.nu)
         j_vec = np.array([None])
         i_vec = np.array([None, None])
         i = 0
@@ -24,7 +24,10 @@ class SimMaster:
             print('Curr x: {0}'.format(car_model.z[0]))
             if car_model.z[0] >= controller.x_goal:
                 break
-            car_model.update_state(u)
+            if controller.nu == 1:
+                car_model.update_state([car_model.z[2], u])
+            else:
+                car_model.update_state(u)
             i = i + 1
 
         return t_vec[1:], z_vec[1:, :], u_vec[1:, :], j_vec[1:], i_vec[1:, :]
