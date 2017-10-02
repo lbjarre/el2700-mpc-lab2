@@ -18,7 +18,7 @@ track = Track(models['track'])
 Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = 1
-N = 7
+N = 13
 mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N)
 mpc.initialize(track, car)
 
@@ -66,15 +66,15 @@ ax_cost.set_xlabel('Time [s]')
 ax_cost.set_ylabel('J_n')
 
 ax_time = fig_plots.add_subplot(2, 2, 4)
-ax_time.plot(t, i[:, 0])
+ax_time.plot(t, 10*i[:, 0])
 ax_time.plot(t, i[:, 1])
 ax_time.set_title('Computation')
 ax_time.set_xlabel('Time [s]')
-ax_time.set_ylabel('Solve time [s], iterations [#]')
+ax_time.set_ylabel('Solve time [100 ms], iterations [#]')
 
 plt.show()
 
-with open('data/nmpc_N7.csv', 'w+') as outfile:
+with open('data/nmpc_N'+str(N)+'.csv', 'w+') as outfile:
     writer = csv.writer(outfile, delimiter=' ')
     writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
     iterlist = zip(
