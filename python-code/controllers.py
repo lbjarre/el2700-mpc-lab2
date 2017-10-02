@@ -2,6 +2,7 @@ import numpy as np
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
 import matplotlib.patches as ptch
+import time
 
 class MPC:
 
@@ -87,11 +88,12 @@ class MPC:
             beta_prev = curr_u[1]
         return f_ineq
 
-    def calc_control(self, z):
+    def calc_control(self, z, partial_tracking=False):
         '''Calculate the MPC control given the current state z and the previous
            wheel angle beta. Solves the optimization problem and returns the
            first input step and the evaluated cost.'''
         self.z0 = z
+        t_start = time.process_time()
         init_guess = self.calc_init_guess()
         res = opt.minimize(self.cost_function,
                            init_guess,
@@ -103,31 +105,12 @@ class MPC:
                                'disp': True,
                                #'ftol': 0.01
                            })
-        # if not res.success: print('No viable solution found!')
-        ### partial tracking
-        # z = np.zeros((self.N, 4))
-        # for k in range(self.N):
-        #     z[k, :] = self.get_state(res.x, k)
-        # fig = plt.figure()
-        #
-        # ax_xy = fig.add_subplot(1, 1, 1)
-        # [ax_xy.add_patch(
-        #     ptch.Rectangle(
-        #         *obs.get_plot_params(),
-        #         facecolor='red',
-        #         hatch='/'
-        #     )
-        # ) for obs in self.obstacles]
-        # ax_xy.plot(z[:, 0], z[:, 1])
-        # ax_xy.set_title('XY-plot')
-        # ax_xy.set_xlabel('x [m]')
-        # ax_xy.set_ylabel('y [m]')
-        # ax_xy.set_xlim([0, 50])
-        # ax_xy.set_ylim([-8, 8])
-        # plt.show()
+        t_solve = time.process_time() - t_start
+        if partial_tracking:
+            self.print_partial_progress(res.x, init_guess)
         u_opt = self.get_control(res.x, 0)
         self.beta0 = u_opt[1]
-        return u_opt, res.fun, res.nit
+        return u_opt, res.fun, res.nit, t_solve
 
     def calc_init_guess(self):
         '''Calculates an initial guess for the optimization problem based on
@@ -161,8 +144,11 @@ class MPC:
                             if sel == 0:
                                 break
                         else:
-                            a = -1
-                        u[n + 1:, :] = np.tile([0, beta_prev], (self.N - n - 2, 1))
+                            a = a - 0.1
+                            a_max = self.get_control(self.bounds, 0)[0][1]
+                            if abs(a) > a_max:
+                                a = np.sign(a)*a_max
+                        u[n + 1:, :] = np.tile([a, beta_prev], (self.N - n - 2, 1))
                         break
                 else:
                     # no collisions detected, add state to initial guess
@@ -177,6 +163,30 @@ class MPC:
         z_flat = np.ndarray.flatten(z)
         u_flat = np.ndarray.flatten(u)
         return np.concatenate((z_flat, u_flat))
+
+    def print_partial_progress(self, x_opt, x_init):
+        z_opt = np.zeros((self.N, 4))
+        z_init = np.zeros((self.N, 4))
+        for k in range(self.N):
+            z_opt[k, :] = self.get_state(x_opt, k)
+            z_init[k, :] = self.get_state(x_init, k)
+        fig = plt.figure()
+        ax_xy = fig.add_subplot(1, 1, 1)
+        [ax_xy.add_patch(
+            ptch.Rectangle(
+                *obs.get_plot_params(),
+                facecolor='red',
+                hatch='/'
+            )
+        ) for obs in self.obstacles]
+        ax_xy.plot(z_init[:, 0], z_init[:, 1], color='b', linestyle='--', marker='+')
+        ax_xy.plot(z_opt[:, 0], z_opt[:, 1], color='g', marker='+')
+        ax_xy.set_title('XY-plot')
+        ax_xy.set_xlabel('x [m]')
+        ax_xy.set_ylabel('y [m]')
+        ax_xy.set_xlim([0, 50])
+        ax_xy.set_ylim([-8, 8])
+        plt.show()
 
 class RefTrackMPC(MPC):
 
