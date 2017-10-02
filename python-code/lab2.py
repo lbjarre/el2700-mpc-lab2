@@ -1,6 +1,7 @@
-from vehiclemodel import CarModel
+from vehiclemodel import NonlinearCarModel, LinearizedCarModel
 from trackmodel import Obstacle, Track
 from controllers import RefTrackMPC, ObstacleAvoidMPC
+from simmaster import SimMaster
 import numpy as np
 import yaml
 import matplotlib.pyplot as plt
@@ -10,19 +11,18 @@ import csv
 with open('python-code/models.yaml') as input_file:
     models = yaml.safe_load(input_file)
 
-car = CarModel(models['car'])
-obstacles = [Obstacle(o) for o in models['obstacles']]
+car = NonlinearCarModel(models['car'])
 track = Track(models['track'])
 
 Q1 = 10*np.identity(2)
 Q2 = 0.01*np.identity(2)
 Qf = 1
-N = 10
-ref = np.zeros((100, 4))
+N = 8
+mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N)
+mpc.initialize(track, car)
 
-# mpc = RefTrackMPC(Q1, Q2, Qf, N, car)
-mpc = ObstacleAvoidMPC(Q1, Q2, Qf, N, car, obstacles, track)
-t, z, u, j, i = car.run_sim(mpc, ref)
+master = SimMaster(car.Ts)
+t, z, u, j, i = master.run_sim(track, car, mpc)
 
 fig = plt.figure()
 
@@ -33,7 +33,7 @@ ax_xy = fig.add_subplot(3, 2, 1)
         facecolor='red',
         hatch='/'
     )
-) for obs in obstacles]
+) for obs in track.obstacles]
 ax_xy.plot(z[:, 0], z[:, 1])
 ax_xy.set_title('XY-plot')
 ax_xy.set_xlabel('x [m]')
@@ -71,7 +71,7 @@ plt.show()
 
 print(t.shape)
 
-with open('data/nmpc_N10.csv', 'w+') as outfile:
+with open('data/nmpc_N8.csv', 'w+') as outfile:
     writer = csv.writer(outfile, delimiter=' ')
     writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
     iterlist = zip(

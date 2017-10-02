@@ -5,19 +5,11 @@ import matplotlib.patches as ptch
 
 class MPC:
 
-    def __init__(self, Q1, Q2, Qf, N, car_model, obstacles=[], track=None):
+    def __init__(self, Q1, Q2, Qf, N):
         self.Q1 = Q1
         self.Q2 = Q2
         self.Qf = Qf
         self.N = N
-        self.update_functions = car_model.update_functions
-        self.a_max = car_model.a_max
-        self.beta_max = car_model.beta_max
-        self.beta_dot_max = car_model.beta_dot_max
-        self.Ts = car_model.Ts
-        self.obstacles = obstacles
-        self.x_goal = track.x_end
-        self.track = track
         self.constraints = (
             {
                 'type': 'eq',
@@ -28,6 +20,11 @@ class MPC:
                 'fun': self.inequality_constraints
             }
         )
+
+    def initialize(self, track, car_model):
+        self.beta0 = car_model._beta
+        self.Ts = car_model.Ts
+        self.model_dynamics = car_model.get_model_dynamics(self.Ts)
         z_bound = (
             (-np.inf, np.inf),
             (track.y_edge_lo, track.y_edge_hi),
@@ -35,10 +32,16 @@ class MPC:
             (-np.inf, np.inf)
         )
         u_bound = (
-            (-self.a_max, self.a_max),
-            (-self.beta_max, self.beta_max)
+            (-car_model.a_max, car_model.a_max),
+            (-car_model.beta_max, car_model.beta_max)
         )
-        self.bounds = np.vstack((np.tile(z_bound, (self.N - 1, 1)), np.tile(u_bound, (self.N - 1, 1))))
+        self.bounds = np.vstack((
+            np.tile(z_bound, (self.N - 1, 1)),
+            np.tile(u_bound, (self.N - 1, 1))
+        ))
+        self.beta_dot_max = car_model.beta_dot_max
+        self.x_goal = track.x_end
+        self.obstacles = track.obstacles
 
     def xTQx(self, x, Q):
         return np.dot(np.dot(np.transpose(x), Q), x)
@@ -70,7 +73,7 @@ class MPC:
         z_prev = self.z0
         for k in range(self.N - 1):
             curr_u = self.get_control(x, k)
-            new_state = self.update_functions(z_prev, curr_u)
+            new_state = self.model_dynamics(z_prev, curr_u)
             f_eq[4*k: 4*(k+1)] = new_state - self.get_state(x, k+1)
             z_prev = new_state
         return f_eq
@@ -84,13 +87,11 @@ class MPC:
             beta_prev = curr_u[1]
         return f_ineq
 
-    def calc_control(self, z, beta, reference):
+    def calc_control(self, z):
         '''Calculate the MPC control given the current state z and the previous
            wheel angle beta. Solves the optimization problem and returns the
            first input step and the evaluated cost.'''
         self.z0 = z
-        self.beta0 = beta
-        self.reference = reference
         init_guess = self.calc_init_guess()
         res = opt.minimize(self.cost_function,
                            init_guess,
@@ -124,8 +125,9 @@ class MPC:
         # ax_xy.set_xlim([0, 50])
         # ax_xy.set_ylim([-8, 8])
         # plt.show()
-
-        return self.get_control(res.x, 0), res.fun, res.nit
+        u_opt = self.get_control(res.x, 0)
+        self.beta0 = u_opt[1]
+        return u_opt, res.fun, res.nit
 
     def calc_init_guess(self):
         '''Calculates an initial guess for the optimization problem based on
@@ -138,7 +140,7 @@ class MPC:
             z = np.zeros((self.N - 1, 4), dtype=np.float64)
             z_prev = self.z0
             for k in range(self.N - 1):
-                z[k, :] = self.update_functions(z_prev, u[k, :])
+                z[k, :] = self.model_dynamics(z_prev, u[k, :])
                 # check if the new state causes any collisions
                 for obs in self.obstacles:
                     if obs.collision(z[k, 0], z[k, 1]):
@@ -152,7 +154,7 @@ class MPC:
                             sel = np.argmin([abs(beta_dot_desired), self.beta_dot_max])
                             beta_prev = [beta_desired, beta_prev + sgn*self.Ts*self.beta_dot_max][sel]
                             u[n, :] = np.array([a, beta_prev])
-                            z_ = self.update_functions(z_, u[n, :])
+                            z_ = self.model_dynamics(z_, u[n, :])
                             angle = obs.get_closest_edge_angle(z_[0], z_[1])
                             beta_desired = angle - z_[3]
                             beta_dot_desired = (beta_desired - u[n, 1])/self.Ts

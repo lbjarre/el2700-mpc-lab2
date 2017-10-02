@@ -5,25 +5,25 @@ car:
   a_max: 1
   beta_max: 45
   beta_dot_max: 100
-obstacles:
-  - x: 10
-    y: -2
-    x_size: 2
-    y_size: 6
-  - x: 20
-    y: 0
-    x_size: 2
-    y_size: 6
-  - x: 30
-    y: -2
-    x_size: 2
-    y_size: 6
-  - x: 40
-    y: 6
-    x_size: 2
-    y_size: 6
 track:
   x_start: 0
   x_end: 50
   y_edge_lo: -8
   y_edge_hi: 8
+  obstacles:
+    - x: 10
+      y: -2
+      x_size: 2
+      y_size: 6
+    - x: 20
+      y: 0
+      x_size: 2
+      y_size: 6
+    - x: 30
+      y: -2
+      x_size: 2
+      y_size: 6
+    - x: 40
+      y: 6
+      x_size: 2
+      y_size: 6

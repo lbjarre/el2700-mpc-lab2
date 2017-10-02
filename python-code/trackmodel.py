@@ -47,11 +47,12 @@ class Obstacle:
 
 class Track:
 
-    def __init__(self, o):
-        self.x_start = o['x_start']
-        self.x_end = o['x_end']
-        self.y_edge_hi = o['y_edge_hi']
-        self.y_edge_lo = o['y_edge_lo']
+    def __init__(self, params):
+        self.x_start = params['x_start']
+        self.x_end = params['x_end']
+        self.y_edge_hi = params['y_edge_hi']
+        self.y_edge_lo = params['y_edge_lo']
+        self.obstacles = [Obstacle(o) for o in params['obstacles']]
 
     def in_track(self, x, y):
         if self.y_edge_lo < y and y < self.y_edge_hi:
