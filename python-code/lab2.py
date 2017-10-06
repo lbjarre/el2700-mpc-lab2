@@ -17,24 +17,26 @@ track = Track(models['track'])
 
 Qz = np.array([
     [0, 0, 0, 0],
-    [0, 0, 0, 0],
+    [0, 1, 0, 0],
     [0, 0, 1, 0],
     [0, 0, 0, 0]
 ])
-Qu = 0.01*np.identity(1)
+Qu = 0.01*np.identity(2)
 Qf = 1
-N = 8
-Qzf = np.array([-1, 0, 0, 0])
-mpc = ObstacleAvoidMPC(Qz, Qu, Qf, N)
+N = 5
+margin = 0.5
+Qzf = np.array([-10, 0, 0, 0])
+mpc = ObstacleAvoidMPC(Qz, Qu, Qf, N, margin)
 mpc.initialize(track, car)
 
-lmpc = LinearizedMPC(Qz, Qu, Qf, Qzf, N)
-lmpc.initialize(track, lcar)
+# lmpc = LinearizedMPC(Qz, Qu, Qf, Qzf, N)
+# lmpc.initialize(track, lcar)
 
 partial_tracking = True
+save_plot = False
 
 master = SimMaster(car.Ts)
-t, z, u, j, i = master.run_sim(track, car, lmpc, partial_tracking)
+t, z, u, j, i = master.run_sim(track, car, mpc, partial_tracking)
 
 fig_xy = plt.figure()
 
@@ -63,7 +65,7 @@ ax_states.set_ylabel('z_n')
 
 ax_input = fig_plots.add_subplot(2, 2, 2)
 ax_input.plot(t, u[:, 0])
-ax_input.plot(t, u[:, 1])
+#ax_input.plot(t, u[:, 1])
 ax_input.set_title('Inputs')
 ax_input.set_xlabel('Time [s]')
 ax_input.set_ylabel('u_n')
@@ -83,20 +85,20 @@ ax_time.set_ylabel('Solve time [100 ms], iterations [#]')
 
 plt.show()
 
-with open('data/lmpc_N'+str(N)+'.csv', 'w+') as outfile:
-    writer = csv.writer(outfile, delimiter=' ')
-    writer.writerow(['t', 'x', 'y', 'v', 'psi', 'a', 'beta', 'j', 'tsolve', 'niter'])
-    iterlist = zip(
-        t[:, 0],
-        z[:, 0],
-        z[:, 1],
-        z[:, 2],
-        z[:, 3],
-        u[:, 0],
-        u[:, 1],
-        j[:, 0],
-        i[:, 0],
-        i[:, 1]
-    )
-    for r in iterlist:
-        writer.writerow(r)
+if save_plot:
+    with open('data/nmpc_N'+str(N)+'_marign.csv', 'w+', newline='') as outfile:
+        writer = csv.writer(outfile, delimiter=' ')
+        writer.writerow(['t', 'x', 'y', 'v', 'psi', 'beta', 'j', 'tsolve', 'niter'])
+        iterlist = zip(
+            t[:, 0],
+            z[:, 0],
+            z[:, 1],
+            z[:, 2],
+            z[:, 3],
+            u[:, 0],
+            j[:, 0],
+            i[:, 0],
+            i[:, 1]
+        )
+        for r in iterlist:
+            writer.writerow(r)

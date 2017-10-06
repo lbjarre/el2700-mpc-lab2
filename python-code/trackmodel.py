@@ -11,6 +11,7 @@ class Obstacle:
         self.y_edge_hi = o['y'] + o['y_size']/2
 
     def collision(self, x, y):
+        '''Returns True if the given (x, y) is in the obstacle, else False.'''
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi
         in_y = self.y_edge_lo <= y and y <= self.y_edge_hi
         if in_x and in_y:
@@ -18,6 +19,8 @@ class Obstacle:
         return False
 
     def closest_distance(self, x, y):
+        '''Returns the closest distance to an edge of the obstacle from the given
+           (x, y). Distances from points (x, y) inside the obstacles are negative.'''
         in_x = self.x_edge_lo <= x and x <= self.x_edge_hi
         in_y = self.y_edge_lo <= y and y <= self.y_edge_hi
         x_dists = [self.x_edge_lo - x, x - self.x_edge_hi]
@@ -33,6 +36,8 @@ class Obstacle:
         return x_sel
 
     def get_closest_edge_angle(self, x, y):
+        '''Returns the angle to the closest corner of the obstacle from the given
+           point (x, y).'''
         y_diff_hi = self.y_edge_hi - y
         y_diff_lo = self.y_edge_lo - y
         x_diff = self.x_edge_lo - x
@@ -42,6 +47,7 @@ class Obstacle:
         return (angle_hi, angle_lo)[i]
 
     def get_plot_params(self):
+        '''Returns params for the Patches library to plot the obstacle.'''
         lower_left = (self.x_edge_lo, self.y_edge_lo)
         return [lower_left, self.x_size, self.y_size]
 

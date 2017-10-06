@@ -13,6 +13,9 @@ class CarModel(object):
         self.Ts = params['Ts']
 
     def check_input_constrains(self, u):
+        '''Checks the given control vector u for input constraints violations
+           and returns a vector with the allowed inputs, if any violations were
+           made.'''
         a = np.sign(u[0])*min(abs(u[0]), self.a_max)
         beta = np.sign(u[1])*min(abs(u[1]), self.beta_max)
         beta_dot = (beta - self._beta)/self.Ts
@@ -23,6 +26,7 @@ class CarModel(object):
 class NonlinearCarModel(CarModel):
 
     def model_dynamics(self, z, u, Ts):
+        '''Returns z_{k+1} given z_k, u_k and the sampling time Ts.'''
         return z + Ts*np.array([
             z[2]*np.cos(z[3] + u[1]),
             z[2]*np.sin(z[3] + u[1]),
@@ -31,9 +35,13 @@ class NonlinearCarModel(CarModel):
         ])
 
     def get_model_dynamics(self, Ts):
+        '''Returns an function for the model dynamics of the car, given the Ts
+           fed to this function.'''
         return lambda z, u: self.model_dynamics(z, u, Ts)
 
     def update_state(self, u):
+        '''Checks the input vector for input violations and updates the objects
+           internal state given the constrained input. Also returns the new state.'''
         u = self.check_input_constrains(u)
         self.z = self.model_dynamics(self.z, u, self.Ts)
         self._beta = u[1]

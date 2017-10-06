@@ -6,13 +6,14 @@ import time
 
 class MPC:
 
-    def __init__(self, Qz, Qu, Qf, N):
+    def __init__(self, Qz, Qu, Qf, N, margin):
         self.nz = 4
         self.nu = 2
         self.Qz = Qz
         self.Qu = Qu
         self.Qf = Qf
         self.N = N
+        self.margin = margin
         self.constraints = (
             {
                 'type': 'eq',
@@ -25,6 +26,7 @@ class MPC:
         )
 
     def initialize(self, track, car_model):
+        '''Initialize the controller for the track model and the car model.'''
         self.beta0 = car_model._beta
         self._x_opt = None
         self.Ts = car_model.Ts
@@ -55,6 +57,7 @@ class MPC:
         self.obstacles = track.obstacles
 
     def xTQx(self, x, Q):
+        '''Returns the value of x^TQx'''
         return np.dot(np.dot(np.transpose(x), Q), x)
 
     def get_ref_err(self, x, ref, k):
@@ -68,35 +71,43 @@ class MPC:
         return pos - pos_ref
 
     def get_control(self, x, i):
-        '''Gets z(i) from the optimization variable x'''
+        '''Gettter of the control vector at time instance i from the optimization
+           variable x.'''
         start = self.nz*(self.N - 1) + self.nu*i
         if self.nu == 1:
             return x[start]
         return x[start: start + self.nu]
 
     def get_state(self, x, i):
-        '''Gets u(i) from the optimization variable x'''
+        '''Gettter of the state vector at time instance i from the optimization
+           variable x.'''
         if i == 0:
             return self.z0
         start = self.nz*(i-1)
         return x[start: start + self.nz]
 
     def set_state(self, x, z, i):
+        '''Setter for a state vector z at time instance i for the optimization
+           variable x.'''
         start = self.nz*(i-1)
         x[start: start + self.nz] = z
         return x
 
     def set_control(self, x, u, i):
+        '''Setter for a control vector u at time instance i for the optimization
+           variable x.'''
         start = self.nz*(self.N - 1) + self.nu*i
         x[start: start + self.nu] = u
         return x
 
     def get_beta(self, u):
+        '''Getter for the beta value in the control vector u'''
         if self.nu > 1:
             return u[1]
         return u
 
     def set_beta(self, u, beta):
+        '''Setter for the beta value in the control vector u'''
         if self.nu > 1:
             u[1] = beta
         else:
@@ -104,6 +115,7 @@ class MPC:
         return u
 
     def get_model_constraints(self, x):
+        '''Checks the optimization variable for violation against model dynamics'''
         f_eq = np.zeros(self.nz*(self.N - 1))
         z_prev = self.z0
         for k in range(self.N - 1):
@@ -114,6 +126,7 @@ class MPC:
         return f_eq
 
     def get_input_constraints(self, x):
+        '''Checks the optimization variable for violations against beta dot max'''
         f_ineq = np.zeros(self.N - 1)
         beta_prev = self.beta0
         for k in range(self.N - 1):
@@ -125,13 +138,14 @@ class MPC:
     def calc_control(self, z, partial_tracking=False):
         '''Calculate the MPC control given the current state z and the previous
            wheel angle beta. Solves the optimization problem and returns the
-           first input step and the evaluated cost.'''
+           first input step, the evaluated cost, the number of iterations performed
+           by the solved and the total solve time.'''
         self.z0 = z
         t_start = time.process_time()
         init_guess = self.calc_init_guess()
         res = opt.minimize(self.cost_function,
                            init_guess,
-                           #method='SLSQP',
+                           method='SLSQP',
                            constraints=self.constraints,
                            bounds=self.bounds,
                            options={
@@ -148,39 +162,68 @@ class MPC:
         return u_opt, res.fun, res.nit, t_solve
 
     def calc_init_guess(self):
+        '''Generates an initial guess for the solver to start from. Based on two
+           solutions:
+           1) if there exists no previous solution from an earlier step, call
+              generate_new_guess()
+           2) if there exists a previous solution, try to base the new initial guess
+              from this. Take all points from the previous solution except the first
+              one, and then use the model dynamics to generate the new step. If this
+              step is feasible, use it. If its not, try to steer away from the
+              obstacle and return the first feasible variable.'''
+
         if self._x_opt is None:
+            # No previous solution is available, generate a new one.
             return self.generate_new_guess()
+
+        # create a new optimization vector and copy the elements from the previous one
         x_init = np.zeros((self.nz + self.nu)*(self.N - 1))
         for k in range(self.N - 2):
             _z_opt = self.get_state(self._x_opt, k + 2)
             x_init = self.set_state(x_init, _z_opt, k + 1)
             _u_opt = self.get_control(self._x_opt, k + 1)
             x_init = self.set_control(x_init, _u_opt, k)
+        # using the previous input, use the model dynamics to generate a new state
         z_N = self.model_dynamics(_z_opt, _u_opt)
         x_init = self.set_control(x_init, _u_opt, self.N - 2)
         x_init = self.set_state(x_init, z_N, self.N - 1)
+        # run through all obstacles in the track
         for obs in self.obstacles:
-            if obs.collision(z_N[0], z_N[1]):
+            if obs.closest_distance(z_N[0], z_N[1]) < self.margin:
+                # the last state is inside the margin for the obstacle
+                # find which way we should steer to get away from the obstacle
                 sgn = np.sign(obs.get_closest_edge_angle(_z_opt[0], _z_opt[1]))
+                # iterate backwards through each time step
                 for n in range(self.N - 1, 0, -1):
                     z = self.get_state(x_init, n - 1)
+                    # set the control for this time step as the maximum allowed
+                    # steering angle away from the obstacle
                     u = self.get_control(x_init, n - 1)
                     _u = self.get_control(x_init, n - 2)
                     beta = self.get_beta(_u) + sgn*self.Ts*self.beta_dot_max
+                    # TODO: check for beta_max as well.
                     u = self.set_beta(u, beta)
+                    # use the new control sequence to generate new states
                     for k in range(self.N - n):
                         z = self.model_dynamics(z, u)
                         x_init = self.set_control(x_init, u, n + k - 1)
                         x_init = self.set_state(x_init, z, n + k)
                         beta = self.get_beta(u) + sgn*self.Ts*self.beta_dot_max
                         u = self.set_beta(u, beta)
-                    if not obs.collision(z[0], z[1]):
+                    # check if the last state is outside the obstacle margin
+                    if obs.closest_distance(z[0], z[1]) >= self.margin:
+                        # if it is, break out of the loop
                         break
+                    # else, go one step further back in time and try to steer earlier
                 else:
+                    # could not steer away in time, no initial feasible solution
+                    # could be found
                     raise ValueError('cannot find init guess!')
         return x_init
 
     def generate_new_guess(self):
+        '''Generates an initial guess when there is no previous solution to base
+           it from.'''
         x_init = np.zeros((self.nz + self.nu)*(self.N - 1))
         for k in range(self.N - 1):
             new_state = self.model_dynamics(
@@ -188,9 +231,11 @@ class MPC:
                 self.get_control(x_init, k))
             x_init = self.set_state(x_init, new_state, k + 1)
             for obs in self.obstacles:
-                if obs.collision(new_state[0], new_state[1]):
+                if obs.closest_distance(new_state[0], new_state[1]) < self.margin:
                     _z = self.z0
                     _beta = self.beta0
+                    _u = self.get_control(x_init, 0)
+                    _u = self.set_beta(_u, _beta)
                     sel = 1
                     for n in range(self.N - 1):
                         if sel == 1:
@@ -205,12 +250,15 @@ class MPC:
                                 beta_desired,
                                 _beta + sgn*self.Ts*self.beta_dot_max
                             ][sel]
-                        x_init = self.set_control(x_init, [0, _beta], n)
-                        _z = self.model_dynamics(_z, [0, _beta])
+                        _u = self.set_beta(_u, _beta)
+                        x_init = self.set_control(x_init, _u, n)
+                        _z = self.model_dynamics(_z, _u)
                         x_init = self.set_state(x_init, _z, n + 1)
         return x_init
 
     def print_partial_progress(self, x_opt, x_init):
+        '''Plots the initial guess and optimal solution for the current time
+           step, including the prediction horizion.'''
         z_opt = np.zeros((self.N, self.nz))
         z_init = np.zeros((self.N, self.nz))
         for k in range(self.N):
@@ -278,7 +326,7 @@ class ObstacleAvoidMPC(MPC):
         for k in range(1, self.N):
             curr_z = self.get_state(x, k)
             for i, obs in enumerate(self.obstacles):
-                f_obs[n_obs*(k-1)+i] = obs.closest_distance(curr_z[0], curr_z[1])
+                f_obs[n_obs*(k-1)+i] = obs.closest_distance(curr_z[0], curr_z[1]) - self.margin
         return np.concatenate((f_input, f_obs))
 
 class LinearizedMPC(MPC):
@@ -301,7 +349,7 @@ class LinearizedMPC(MPC):
                 [self.H, z1],
                 [z2, self.Qu]
             ])
-        self.h = np.tile(Qzf, self.nz)
+        self.h = np.tile(Qzf, self.N-1)
         self.h = np.concatenate((self.h, np.zeros((self.N-1)*self.nu)))
 
     def cost_function(self, x):
