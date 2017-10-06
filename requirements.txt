@@ -1,0 +1,4 @@
+el2700-mpc-lab2 requirements.txt
+numpy==1.13.1+mkl
+scipy==0.19.1
+matplotlib==2.0.2
