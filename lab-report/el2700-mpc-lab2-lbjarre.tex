@@ -1,9 +1,7 @@
 \documentclass{article}
 
 \usepackage{geometry}
-\usepackage{fontspec}
 \usepackage{mathtools}
-\usepackage{unicode-math}
 \usepackage{hyperref}
 \usepackage{cleveref}
 \usepackage{pgfplots}
@@ -24,14 +22,6 @@
 \definecolor{lblue}{HTML}{0088DD}
 \definecolor{lred}{HTML}{FF5555}
 \definecolor{lgrey}{HTML}{BBBBBB}
-
-\setmainfont{texgyrepagella}[
-  UprightFont=*-regular,
-  ItalicFont=*-italic,
-  BoldFont=*-bold,
-  BoldItalicFont=*-bolditalic
-]
-\setmathfont{texgyrepagella-math}
 
 \newcommand{\mail}[1]{\href{mailto:#1}{#1}}
 
@@ -122,6 +112,20 @@ The discretized system $\Delta z_{k+1}=\Phi\Delta z_k + \Gamma\Delta\beta_k$ is 
 
 \section{Track model}
 
+\subsection{Obstacle model}
+The track has obstacles in it which the controller need to avoid. Each obstacle is defined by its center position and its size in the $x$ and $y$ dimensions. We define the set $\mathcal{O}$ as all the obstacles in the track and assume perfect knowledge of all obstacles.
+
+The controller should avoid collision with these obstacles. This will be implemented through a function $C(x)$ taking the optimization variable $x$, which the solver will constrain to $C(x) \geq 0$. The function which will be used can intuitively be interpreted as the minimum distance to an edge point of the obstacle, where distances inside the box are negative. Defining the sets $\mathcal{B}$ as all the points inside the obstacle and $\mathcal{B}_\mathcal{E}$ as all the points on the edge of the obstacle the function can be defined as:
+\begin{equation}
+  d_{\mathrm{obs}}(x,\,y) = \begin{cases}
+    \underset{(x_e,\,y_e)\in\mathcal{B}_{\mathcal{E}}}{\text{min}} \left\Vert(x,\,y) - (x_e,\,y_e)\right\Vert_2 & \quad\text{if } (x,\,y) \notin \mathcal{B} \\
+    - \underset{(x_e,\,y_e)\in\mathcal{B}_{\mathcal{E}}}{\text{min}} \left\Vert(x,\,y) - (x_e,\,y_e)\right\Vert_2 & \quad\text{if } (x,\,y) \in \mathcal{B}
+  \end{cases}
+\end{equation}
+This function can be seen in \cref{fig:obsdistfunc} for a box with the sizes used in the lab. This function works well since it is continous for all points which makes methods such as grandient descent possible for the solvers when trying to fulfill the constraint.
+
+Note that the function can be impemented in code in such a way that no optimization problem needs to be solved.
+
 \begin{figure}[!ht]
   \centering
   \begin{tikzpicture}
@@ -163,7 +167,7 @@ The discretized system $\Delta z_{k+1}=\Phi\Delta z_k + \Gamma\Delta\beta_k$ is 
       ] {0*x+0*y};
     \end{axis}
   \end{tikzpicture}
-  \caption{Plot of the distance function $d_{\mathrm{obs}(x,\,y)}$ around an obstacle centered at $(0,\,0)$ and dimensions $x_{\mathrm{size}}=2$, $y_{\mathrm{size}}=6$.}
+  \caption{Plot of the distance function $d_{\mathrm{obs}}(x,\,y)$ around an obstacle centered at $(0,\,0)$ and dimensions $x_{\mathrm{size}}=2$, $y_{\mathrm{size}}=6$.}
   \label{fig:obsdistfunc}
 \end{figure}
 
@@ -176,8 +180,16 @@ The main objective in this setting is to reach the end of the track as quickly a
 \subsection{MPC formulation}
 
 \begin{equation}
-  \text{minimize}\;\sum_{n=0}^{N-1}\left[u_n^TQ_uu_n + (x_{\mathrm{goal}} - x_n)Q_x\right] + (x_{\mathrm{goal}}-x_N)Q_x\\
-  \text{subject to}\;z_{k+1} = z_k + T_s f(z_k, u_k)\;\forall k=0,\,1,\,\ldots\,,\,N-1
+  \begin{aligned}
+    \text{minimize} & \quad && \sum_{n=0}^{N-1}\left[u_n^TQ_uu_n + (x_{\mathrm{goal}} - x_n)Q_x\right] + (x_{\mathrm{goal}}-x_N)Q_x \\
+    \text{subject to} & && z_{k+1} = z_k + T_s f(z_k, u_k) \\
+    & && d_{\mathrm{obs}}(x_{k+1},\,y_{k+1}) \geq d_{\mathrm{margin}}\\
+    & && -8 < y_k < 8 \\
+    & && -a_{\mathrm{max}} \leq a_k \leq a_{\mathrm{max}} \\
+    & && -\beta_{\mathrm{max}} \leq \beta_k \leq \beta_{\mathrm{max}} \\
+    & && -\dot{\beta}_{\mathrm{max}} \leq \frac{\beta_k - \beta_{k-1}}{T_s} \leq \dot{\beta}_{\mathrm{max}} \\
+    & && \forall k=0,\,1,\,\ldots\,,\,N-1, \quad \forall \mathrm{obs} \in \mathcal{O}
+  \end{aligned}
 \end{equation}
 
 \section{Simulations}
